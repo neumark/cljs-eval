@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="css/style.css" rel="stylesheet" type="text/css">
+    <link rel="icon" href="https://clojurescript.org/images/cljs-logo-icon-32.png">
+  </head>
+  <body>
+    <div id="app">
+      <h2>Figwheel template</h2>
+      <p>Checkout your developer console.</p>
+    </div>
+    <script src="js/compiled/cljs_eval.js" type="text/javascript"></script>
+    <script type="text/javascript">
+     console.log("straight ol' js");
+     var compile = (name, source) => {
+         return new Promise((resolve, reject) => {
+             window.cljs_eval.core.compile_public(name, source, resolve, reject);
+         });
+     };
+     var source = "(ns my.test (:require-macros my.math))\n" +
+                  "(println (my.math/triple 5))";
+     var run = () => compile("example-source.cljs", source).then(window.eval);
+    </script>
+  </body>
+</html>
