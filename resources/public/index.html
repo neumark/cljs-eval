@@ -19,9 +19,26 @@
              window.cljs_eval.core.compile_public(name, source, resolve, reject);
          });
      };
-     var source = "(ns my.test (:require-macros my.math))\n" +
-                  "(println (my.math/triple 5))";
-     var run = () => compile("example-source.cljs", source).then(window.eval);
+
+     var printAndEval = (x) => {
+         console.log(x);
+         window.eval(x);
+     };
+
+    var run = () => {
+    // simple exmple with require
+    compile("example-source.cljs", `
+        (ns my.test (:require-macros my.math))
+        (println (my.math/triple 5))
+    `).then(printAndEval);
+
+    // simple example which exports
+    compile("example-source.cljs", `
+        (ns my.test2)
+        (defn ^:export foobar [x] (+ 1 (* 3 x)))
+    `).then(printAndEval);
+
+    };
     </script>
   </body>
 </html>

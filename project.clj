@@ -42,10 +42,17 @@
                ;; lein cljsbuild once min
                {:id "min"
                 :source-paths ["src"]
-                :compiler {:output-to "resources/public/js/compiled/cljs_eval.js"
+                :compiler {:output-to "target/cljs_eval.min.js"
                            :main cljs-eval.core
                            :optimizations :advanced
-                           :pretty-print false}}]}
+                           :pretty-print false}}
+               {:id "bundle"
+                :source-paths ["src"]
+                :compiler {:output-to "target/cljs_eval_bundle.js"
+                           :main cljs-eval.core
+                           :optimizations :simple
+                           :pretty-print true}}]}
+
 
   :figwheel {;; :http-server-root "public" ;; default and assumes "resources"
              ;; :server-port 3449 ;; default
