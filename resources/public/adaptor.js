@@ -1,7 +1,6 @@
 console.log("straight ol' js");
 
 var globalGoog = window.goog;
-var CLJSmodules = {};
 
 // based on TW5/boot/boot.js
 var sandboxedEval = function(code,context,filename) {
@@ -117,6 +116,18 @@ test("test6", `
         (+ 2 (* 5 x))))
 `);
 
+// using standard macros
+test("test7", `
+    (ns my.test7)
+    (def a (-> {} (assoc :a 1)))
+`);
+
+// defmacro test
+test("test8", `
+    (ns my.test8)
+    (defmacro clog [x] \`(js/console.log ~x))
+    (clog "asdf")
+`);
 
 
 };
