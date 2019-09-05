@@ -14,18 +14,12 @@
                           :cache {}
                           }))
 
-(def ^:export foobar "asdf")
-
 (defn on-js-reload []
   ;; optionally touch your app-state to force rerendering depending on
   ;; your application
   ;; (swap! app-state update-in [:__figwheel_counter] inc)
   (println "js reloaded")
   (println @compiler-state))
-
-(def source "
-  (ns my.test (:require-macros my.math))
-  (def foo (my.math/triple 5))")
 
 (defn load [opts cb]
   (println "Loading dependency" opts)
@@ -46,7 +40,9 @@
 (def compiler-opts  {:eval macro-eval
                      :verbose true
                      :load load
-                     :cache-source print-cache})
+                     :cache-source print-cache
+                     :source-map true
+                     :rename-prefix "cljs_global"})
 
 (defn compile [name source opts cb]
   (cjs/compile-str

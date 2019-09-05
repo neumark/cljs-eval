@@ -48,7 +48,8 @@
                            :pretty-print false}}
                {:id "bundle"
                 :source-paths ["src"]
-                :compiler {:output-to "target/cljs_eval_bundle.js"
+                :compiler {
+                           :output-to "resources/public/js/compiled/cljs_eval_bundle.js"
                            :main cljs-eval.core
                            :optimizations :simple
                            :pretty-print true}}]}
