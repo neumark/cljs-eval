@@ -24,7 +24,14 @@ var sandboxedEval = function(code,context,filename) {
 
  var compile = (filename, source) => {
      return new Promise((resolve, reject) => {
-         window.cljs_eval.core.compile_public(filename, source, resolve, reject);
+         window.cljs_eval.core.compile(source, {
+             'name': filename,
+             'logger': console, // console is the object on which log() error(), etc are invoked.
+             'on_success': resolve,
+             'on_failure': reject
+             // source-loader
+             // js-eval
+         });
      });
  };
 
