@@ -3,17 +3,9 @@
             [cljs.pprint :refer [pprint]]
             [goog.array :as garray]))
 ; based on http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
-(enable-console-print!)
 
 ;; define your app data so that it doesn't get over-written on reload
-
-(defonce compiler-state (atom {
-                          :deps {:macro {
-                                        "my/math" "(ns my.math) (defmacro triple [x] (* 3 x))"}
-                                :normal {
-                                         "my/math" "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))"}}
-                          :cache {}
-                          }))
+(defonce compiler-cache (atom {}))
 
 (defn on-js-reload []
   ;; optionally touch your app-state to force rerendering depending on
@@ -21,43 +13,51 @@
   ;; (swap! app-state update-in [:__figwheel_counter] inc)
   (println "js reloaded"))
 
-(defn load [opts cb]
-  (println "Loading dependency" opts)
-  (if-let [dep-source (get-in @compiler-state [:deps (if (:macros opts) :macro :normal) (str (:path opts))])]
+(defn get-cached-compiled-ns [name macros]
+  (let [cache-key (str name (if macros "$macros" ""))]
+    (get @compiler-cache cache-key)))
+
+(defn invoke-source-loader [source-loader {:keys [name macros path] :as ns-id} cb]
+  (if-let [dep-source (source-loader (clj->js ns-id))]
     (cb {:lang :clj :source dep-source})
-    (throw (js/Error. (str "Unknown namespace " opts)))))
+                                        ; another option is to throw exception
+                                        ;(throw (js/Error. (str "Unknown namespace " ns-id)))
+    (cb nil)))
+
+(defn get-loader [source-loader]
+  (fn [{:keys [name macros] :as ns-id} cb]
+    (println "Loading dependency" ns-id)
+    (let [cached-compiled-ns (get-cached-compiled-ns name macros)]
+      (if cached-compiled-ns
+        (do
+          (println "got cached compiled namespace for " ns-id)
+          (cb {:lang :js :source (:source cached-compiled-ns) :cache (:cache cached-compiled-ns)}))
+        (do
+          (println "no cached compiler output for " ns-id " fallback to source-loader")
+          (invoke-source-loader source-loader ns-id cb))))))
 
 (defn print-cache [opts cb]
   (pprint opts)
   (cb {:value nil}))
-
-(defn macro-eval  [{:keys [name source] :as compiled-ns}]
-  (do
-    (js/console.log (str "evaluating macro in " name))
-    (pprint compiled-ns)
-    (cjs/js-eval compiled-ns)))
-
-(def compiler-opts  {:eval macro-eval
-                     :verbose true
-                     :load load
-                     :cache-source print-cache
-                     :source-map true
-                     :rename-prefix "cljs_global"})
 
 (defn noop [& _args] nil)
 
 (defn do-compile [cljs-source {:keys [name logger source-loader on-success on-failure js-eval] :as opts}]
   (let [compiler-state (cjs/empty-state)
         cb (fn [compiled-ns] (if (:value compiled-ns)
-                               (on-success (:value compilation-result))
-                               (on-failure (clj->js (get-in compilation-result [:error])))))
+                               (on-success (:value compiled-ns))
+                               (let [error (:error compiled-ns)]
+                                 (on-failure (js-obj
+                                              "message" (.-message error)
+                                              "data" (clj->js (.-data error))
+                                              "cause" (.-cause error))))))
         compiler-opts {:eval (fn [{:keys [name source] :as compiled-ns}]
                                (do
                                  (println (str "evaluating macro in " name))
                                  #_(pprint compiled-ns)
                                  (js-eval source)))
                        :verbose true
-                       :load load-dep
+                       :load (get-loader source-loader)
                        :cache-source print-cache
                        :source-map true}]
     (binding [cljs.core/*print-newline* false
@@ -75,7 +75,7 @@
                  :on-failure (or (. js-opts -on-failure) noop)
                  :name (or (. js-opts -name) "unknown")
                  :logger (or (. js-opts -logger) js/console)
-                 :source-loader (or (. js-opts -source-logger) noop)
+                 :source-loader (or (. js-opts -source-loader) noop)
                  :js-eval (or (. js-opts -js-eval) js/eval)
                  }]
     (do-compile cljs-source options)))

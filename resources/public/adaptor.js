@@ -1,6 +1,10 @@
 console.log("straight ol' js");
 
+var $tw = {};
 var globalGoog = window.goog;
+// allow redefinition of namespaces
+goog.isProvided_ = (_) => false;
+
 
 // based on TW5/boot/boot.js
 var sandboxedEval = function(code,context,filename) {
@@ -21,24 +25,33 @@ var sandboxedEval = function(code,context,filename) {
 	return fn.apply(null,contextValues);
 };
 
+var customLogger = {
+    log: (x) => console.log("customLogger " + x),
+    info: (x) => console.info("customLogger " + x),
+    warn: (x) => console.warn("customLogger " + x),
+    error: (x) => console.error("customLogger " + x)
+};
+
 
  var compile = (filename, source) => {
      return new Promise((resolve, reject) => {
          window.cljs_eval.core.compile(source, {
              'name': filename,
-             'logger': console, // console is the object on which log() error(), etc are invoked.
+             'logger': customLogger, // console is the object on which log() error(), etc are invoked.
              'on_success': resolve,
-             'on_failure': reject
-             // source-loader
-             // js-eval
+             'on_failure': reject,
+             'source_loader': (ns_id) => {
+                 // this will be the method to load cljs source from tiddlers
+                 console.log("trying to load source for", ns_id);
+                 if (ns_id.name === 'my.math') {
+                     return ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))";
+                 }
+                 return null;
+             }
+             // js_eval option left to default value
          });
      });
- };
-
-var PatchedGoogCls = function(){};
-PatchedGoogCls.prototype = globalGoog;
-// allow redefinition of namespaces
-goog.isProvided_ = (_) => false;
+};
 
 var overrideMethod = function (localGoog, methodName, methodFn, callSuper) {
     localGoog[methodName] = function() {
@@ -54,8 +67,8 @@ var removeNSPrefix = (symbolName) => {
     return parts[parts.length -1];
 };
 
-var getLocalGoog = (exports) => {
-    var localGoog = new PatchedGoogCls();
+$tw.getLocalGoog = (exports) => {
+    var localGoog = Object.create(globalGoog);
     // exportSymbol doesn't do anything by itself, only when closure compiler is involved.
     overrideMethod(localGoog, "exportSymbol", function(name, value) {
         exports[removeNSPrefix(name)] = value;
@@ -68,12 +81,16 @@ var getLocalGoog = (exports) => {
 };
 
  var test = (name, code) => {
-     compile(name, code).then(js => {
-        var exports = {};
-        var goog = getLocalGoog(exports);
-        console.log(name, code, js);
-        sandboxedEval(js, {goog, exports}, name); 
-     });
+     compile(name, code).then(
+         js => {
+            var exports = {};
+            var jsWithPrelude = "var goog = $tw.getLocalGoog(exports);\n" + js
+            console.log(name, code, jsWithPrelude);
+            sandboxedEval(jsWithPrelude, {$tw, exports}, name); 
+         },
+        err => {
+            console.log("got compilation error", err);
+        });
  };
 
 var run = () => {
