@@ -101,12 +101,10 @@ test("test1", `
 `);
 
 // simple require-function
-/* this compiles but does not yet run because my.math is not known to goog.
 test("test2", `
     (ns my.test2 (:require my.math))
     (println (my.math/myfunc 5 6))
 `);
-*/
 
 // simple export function 
 test("test3", `
@@ -151,6 +149,16 @@ test("test8", `
     (ns my.test8)
     (defmacro clog [x] \`(js/console.log ~x))
     (clog "asdf")
+`);
+
+// require test
+test("test9pre", `
+    (ns my.test8pre)
+    (defn somefn[x] (* 400 x))
+`);
+test("test9main", `
+    (ns my.test8main (:require my.test8pre))
+    (println (my.test8pre/somefn 3))
 `);
 
 
