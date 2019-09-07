@@ -1,7 +1,8 @@
 (ns cljs-eval.core
   (:require [cljs.js :as cjs]
             [cljs.pprint :refer [pprint]]
-            [goog.array :as garray]))
+            [goog.array :as garray]
+            [clojure.string :as str :refer [split-lines, replace]]))
 ; based on http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
 
 ;; define your app data so that it doesn't get over-written on reload
@@ -15,7 +16,7 @@
   (println "js reloaded"))
 
 (defn ns-to-cache-key [name macros]
-  (str name (if macros "$macros" "")))
+  (symbol (str name (if macros "$macros" ""))))
 
 (defn get-cached-compiled-ns [cache-key]
   (get @output-cache cache-key))
@@ -40,33 +41,67 @@
           (println "no cached compiler output for " ns-id " fallback to source-loader")
           (invoke-source-loader source-loader ns-id cb))))))
 
-(defn set-cached-compiled-ns [cache-key compiled-ns]
+(defn set-cached-compiled-ns! [cache-key compiled-ns]
   (swap! output-cache assoc cache-key compiled-ns))
 
 (defn update-cache-handler [compiled-ns cb]
   (do
     (js/console.log "updating cache")
-    (set-cached-compiled-ns (str (get-in compiled-ns [:cache :name])) compiled-ns)
+    (set-cached-compiled-ns! (str (get-in compiled-ns [:cache :name])) compiled-ns)
     (cb {:value nil})))
 
 (defn noop [& _args] nil)
 
+(def goog-provide-re #"^goog\.provide\(\'([^\s]+)\'\);$")
+
+(defn extract-provided-ns [compiled-js-line]
+  (if-let [match (re-matches goog-provide-re compiled-js-line)]
+    (symbol (second match))
+    nil))
+
+(defn get-defined-namespaces [compiled-js]
+  (->> (str/split-lines compiled-js)
+      (map extract-provided-ns)
+      (filter identity)))
+
+(defn make-compiled-ns [ns compiled-js]
+  {:lang :js
+   :name ns
+   :path (str/replace (str ns) #"\." "/") ; TODO: get rid of occasional $macros ending
+   :source compiled-js
+   ; read analysis output from compiler's state
+   :cache (get (:cljs.analyzer/namespaces (deref @compiler-state)) ns)
+  })
+
+(defn write-output-cache! [compiled-js]
+  (if-let [defined-ns (get-defined-namespaces compiled-js)]
+    (do
+      (println "found definitions for namespaces" defined-ns)
+      ; I assume any namespace goog.provided-ed by the output JS is present in the compiler's analysis cache
+      (let [new-cache-entries (apply hash-map (mapcat (fn [ns] [ns (make-compiled-ns ns compiled-js)]) defined-ns))]
+        (println "cache entry for" defined-ns new-cache-entries)
+        (swap! output-cache merge new-cache-entries)))
+  nil))
+
+(defn make-compile-cb [on-success on-failure]
+  (fn [compiler-result] (if (:value compiler-result)
+                          (let [compiled-js (:value compiler-result)]
+                            (do
+                              (println "compiler output" compiled-js)
+                              (write-output-cache! compiled-js)
+                              (on-success compiled-js)))
+                          (let [error (:error compiler-result)]
+                            (on-failure (js-obj
+                                         "message" (.-message error)
+                                         "data" (clj->js (.-data error))
+                                         "cause" (.-cause error)))))))
+
 (defn do-compile [cljs-source {:keys [name logger source-loader on-success on-failure js-eval] :as opts}]
-  (let [cb (fn [compiler-result] (if (:value compiler-result)
-                               (let [compiled-js (:value compiler-result)]
-                                 (do
-                                  (println "compiler output" compiled-js)
-                                  (on-success compiled-js)))
-                               (let [error (:error compiler-result)]
-                                 (on-failure (js-obj
-                                              "message" (.-message error)
-                                              "data" (clj->js (.-data error))
-                                              "cause" (.-cause error))))))
+  (let [cb (make-compile-cb on-success on-failure)
         compiler-opts {; eval is necessary because the compiler needs to evaluate macros to compile source
                        :eval (fn [{:keys [name source] :as compiled-ns}]
                                (do
                                  (println (str "evaluating macro in " name))
-                                 #_(pprint compiled-ns)
                                  (js-eval source)))
                        :verbose false
                        :load (get-loader source-loader)
