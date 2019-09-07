@@ -6,7 +6,7 @@
 
 ;; define your app data so that it doesn't get over-written on reload
 (defonce compiler-state (atom (cjs/empty-state)))
-(defonce compiler-cache (atom {}))
+(defonce output-cache (atom {}))
 
 (defn on-js-reload []
   ;; optionally touch your app-state to force rerendering depending on
@@ -18,13 +18,14 @@
   (str name (if macros "$macros" "")))
 
 (defn get-cached-compiled-ns [cache-key]
-  (get @compiler-cache cache-key))
+  (get @output-cache cache-key))
 
 (defn invoke-source-loader [source-loader {:keys [name macros path] :as ns-id} cb]
   (if-let [dep-source (source-loader (clj->js ns-id))]
     (cb {:lang :clj :source dep-source})
-                                        ; another option is to throw exception
-                                        ;(throw (js/Error. (str "Unknown namespace " ns-id)))
+    ; returning nil will result in an exception.
+    ; its also possible to throw immediately:
+    ;(throw (js/Error. (str "Unknown namespace " ns-id)))
     (cb nil)))
 
 (defn get-loader [source-loader]
@@ -40,7 +41,7 @@
           (invoke-source-loader source-loader ns-id cb))))))
 
 (defn set-cached-compiled-ns [cache-key compiled-ns]
-  (swap! compiler-cache assoc cache-key compiled-ns))
+  (swap! output-cache assoc cache-key compiled-ns))
 
 (defn update-cache-handler [compiled-ns cb]
   (do
@@ -51,22 +52,28 @@
 (defn noop [& _args] nil)
 
 (defn do-compile [cljs-source {:keys [name logger source-loader on-success on-failure js-eval] :as opts}]
-  (let [cb (fn [compiled-ns] (if (:value compiled-ns)
-                               (do
-                                 (println "compiler output" compiled-ns)
-                                 (on-success (:value compiled-ns)))
-                               (let [error (:error compiled-ns)]
+  (let [cb (fn [compiler-result] (if (:value compiler-result)
+                               (let [compiled-js (:value compiler-result)]
+                                 (do
+                                  (println "compiler output" compiled-js)
+                                  (on-success compiled-js)))
+                               (let [error (:error compiler-result)]
                                  (on-failure (js-obj
                                               "message" (.-message error)
                                               "data" (clj->js (.-data error))
                                               "cause" (.-cause error))))))
-        compiler-opts {:eval (fn [{:keys [name source] :as compiled-ns}]
+        compiler-opts {; eval is necessary because the compiler needs to evaluate macros to compile source
+                       :eval (fn [{:keys [name source] :as compiled-ns}]
                                (do
                                  (println (str "evaluating macro in " name))
                                  #_(pprint compiled-ns)
                                  (js-eval source)))
                        :verbose false
                        :load (get-loader source-loader)
+                       ; note: cache-source fn is only called by the compiler when macros are
+                       ; compiled and evaluted in order to compile code which refer-macros them.
+                       ; normally, the compiler will not call this method when code is compiled, this
+                       ; must be done manually in the callback fn passed to compile-str
                        :cache-source update-cache-handler
                        :source-map true}]
     (binding [cljs.core/*print-newline* false
@@ -78,8 +85,12 @@
                                            (.apply (.-error logger) logger (garray/clone xs))))]
       (cjs/compile-str @compiler-state cljs-source name compiler-opts cb))))
 
-(defn ^:export dump-cache []
-  (pprint @compiler-cache))
+(defn ^:export dump-output-cache []
+  (pprint @output-cache))
+
+(defn ^:export dump-compiler-state []
+  (pprint @compiler-state))
+
 
 (defn ^:export compile [cljs-source js-opts]
   (let [options {:on-success (or (. js-opts -on-success) noop)

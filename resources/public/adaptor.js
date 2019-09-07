@@ -153,12 +153,12 @@ test("test8", `
 
 // require test
 test("test9pre", `
-    (ns my.test8pre)
+    (ns my.test9pre)
     (defn somefn[x] (* 400 x))
 `);
 test("test9main", `
-    (ns my.test8main (:require my.test8pre))
-    (println (my.test8pre/somefn 3))
+    (ns my.test9main (:require my.test9pre))
+    (println (my.test9pre/somefn 3))
 `);
 
 
