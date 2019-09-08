@@ -35,7 +35,7 @@ var customLogger = {
 
  var compile = (filename, source) => {
      return new Promise((resolve, reject) => {
-         window.cljs_eval.core.compile(source, {
+         globalGoog.global.cljs_eval.core.compile(source, {
              'name': filename,
              'logger': customLogger, // console is the object on which log() error(), etc are invoked.
              'on_success': resolve,
@@ -56,7 +56,7 @@ var customLogger = {
 var overrideMethod = function (localGoog, methodName, methodFn, callSuper) {
     localGoog[methodName] = function() {
         methodFn.apply(localGoog, arguments);
-        if (callSuper) {
+        if (!!callSuper) {
             globalGoog[methodName].apply(localGoog, arguments);
         }
     };
@@ -67,16 +67,40 @@ var removeNSPrefix = (symbolName) => {
     return parts[parts.length -1];
 };
 
+var nsAvailable = (nsName) => {
+    var assertFields = (obj, fieldList) => {
+        if (fieldList.length < 1) {
+            return true;
+        }
+        const nextObj = obj[fieldList[0]]
+        if (!nextObj) {
+            return false;
+        }
+        return assertFields(nextObj, fieldList.splice(1));
+    };
+    return assertFields(globalGoog.global, nsName.split('\.'));
+};
+
 $tw.getLocalGoog = (exports) => {
     var localGoog = Object.create(globalGoog);
     // exportSymbol doesn't do anything by itself, only when closure compiler is involved.
     overrideMethod(localGoog, "exportSymbol", function(name, value) {
         exports[removeNSPrefix(name)] = value;
-    }, false); // do not export globally, only to the exports dictionary
-    // require doesn't do anything by default, but it needs to compile referenced namespaces on demand in the future.
-    overrideMethod(localGoog, "require", function() { console.log("require", arguments); }, false);
-    // provide ensures window.name.codes.namespace is defined.
-    overrideMethod(localGoog, "provide", function() { console.log("provide", arguments); }, true);
+    }); 
+    // require doesn't do anything by default, but it needs to execute compiled namespaces on demand
+    // if they are not available.
+    overrideMethod(localGoog, "require", function(nsName) {
+        if (!nsAvailable(nsName)) {
+            console.log("detected unavailable namespace", nsName);
+            if (globalGoog.global.cljs_eval.core.has_compiled_ns(nsName)) {
+                console.log("compiled js source for namespace available, evaluating");
+                // TODO: pass sandboxedEval as js eval function
+                globalGoog.global.cljs_eval.core.eval_compiled_ns(nsName, {});
+            }
+        }
+    });
+    // provide ensures ns object, eg: window.name.namespace is defined.
+    overrideMethod(localGoog, "provide", function() { console.log("provide", arguments); });
     return localGoog;
 };
 
@@ -161,5 +185,14 @@ test("test9main", `
     (println (my.test9pre/somefn 3))
 `);
 
+// macro and non-macro in the same ns
+// the result is a single non-macro NS (no $macros suffix)
+// proper macro namespaces (ending w/ $macros) are created by
+// :refer-macros (this can happen during AOT compilation).
+test("test10", `
+    (ns my.test10)
+    (defmacro triplem [x] (* 3 x))
+    (defn triplef [x] (* 3 x))
+`);
 
 };

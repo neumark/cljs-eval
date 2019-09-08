@@ -96,13 +96,16 @@
                                          "data" (clj->js (.-data error))
                                          "cause" (.-cause error)))))))
 
+(defn get-js-evaluator [js-eval]
+  (fn [{:keys [name source] :as compiled-ns}]
+    (do
+      (println (str "evaluating macro in " name))
+      (js-eval source))))
+
 (defn do-compile [cljs-source {:keys [name logger source-loader on-success on-failure js-eval] :as opts}]
   (let [cb (make-compile-cb on-success on-failure)
         compiler-opts {; eval is necessary because the compiler needs to evaluate macros to compile source
-                       :eval (fn [{:keys [name source] :as compiled-ns}]
-                               (do
-                                 (println (str "evaluating macro in " name))
-                                 (js-eval source)))
+                       :eval (get-js-evaluator js-eval)
                        :verbose false
                        :load (get-loader source-loader)
                        ; note: cache-source fn is only called by the compiler when macros are
@@ -126,13 +129,23 @@
 (defn ^:export dump-compiler-state []
   (pprint @compiler-state))
 
+(defn ^:export has-compiled-ns [ns-name]
+  (contains? @output-cache (symbol ns-name)))
+
+(defn ^:export eval-compiled-ns [ns-name js-opts]
+  (let [{:keys [name logger source-loader on-success on-failure js-eval] :as opts} (parse-js-opts js-opts)]
+    ( ; TODO: fetch cached compiled ns, feed it to js-eval function
+     )))
+
+(defn parse-js-opts [js-opts]
+  {:on-success (or (. js-opts -on-success) noop)
+   :on-failure (or (. js-opts -on-failure) noop)
+   :name (or (. js-opts -name) "unknown")
+   :logger (or (. js-opts -logger) js/console)
+   :source-loader (or (. js-opts -source-loader) noop)
+   :js-eval (or (. js-opts -js-eval) js/eval)
+   })
 
 (defn ^:export compile [cljs-source js-opts]
-  (let [options {:on-success (or (. js-opts -on-success) noop)
-                 :on-failure (or (. js-opts -on-failure) noop)
-                 :name (or (. js-opts -name) "unknown")
-                 :logger (or (. js-opts -logger) js/console)
-                 :source-loader (or (. js-opts -source-loader) noop)
-                 :js-eval (or (. js-opts -js-eval) js/eval)
-                 }]
+  (let [options (parse-js-opts js-opts)]
     (do-compile cljs-source options)))
