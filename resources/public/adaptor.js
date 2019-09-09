@@ -19,7 +19,7 @@ var sandboxedEval = function(code,context,filename) {
 	code = "(function(" + contextNames.join(",") + ") {(function(){\n" + code + "\n;})();\nreturn exports;\n})\n";
 	// Compile the code into a function
 	var fn;
-        // TODO: cljs compiler also specifies sourceURL, no need to give this twice (with different values)
+        // TODO: cljs compiler also specifies sourceURL, no need to give this twice (with different values), but harmless.
 		fn = window["eval"](code + "\n\n//# sourceURL=" + filename);
 	// Call the function and return the exports
 	return fn.apply(null,contextValues);
