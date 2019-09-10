@@ -104,7 +104,8 @@
                             (do
                               (println "compiler output" compiled-js)
                               (write-output-cache! defined-namespaces compiled-js)
-                              (on-success (clj->js {:dependencies dependencies
+                              (on-success (clj->js {:namespaces defined-namespaces
+                                                    :dependencies dependencies
                                                     :compiled_js compiled-js}))))
                           (let [error (:error compiler-result)]
                             (on-failure (js-obj

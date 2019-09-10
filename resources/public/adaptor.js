@@ -39,17 +39,11 @@ var dummySourceLoader = (ns_id, cb) => {
         cb({filename: "my/math.clj",
             source: ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))"});
     } else {
-        console.log("no source for", ns_id, "returning null");
-        cb(null);
+        throw new Error("no source for " + ns_id.name);
+        //cb(null);
     }
 };
 
-var recursiveDepLoader = (wrappedSourceLoader) => {
-    return (ns_id, cb) => {
-
-
-    };
-};
 
 var compile = (filename, source, options) => {
      return new Promise((resolve, reject) => {
@@ -86,18 +80,6 @@ var nsAvailable = (nsName) => {
     return assertFields(globalGoog.global, nsName.split('\.'));
 };
 
-// load cljs source, compile and evalute compiled js on demand
-var loadNamespaceJIT = (nsName, compilerOptions) => {
-    var namespaceId = {name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")};
-    return new Promise((resolve, reject) => {
-        compilerOptions.source_loader(namespaceId, resolve);
-    }).then(src => {
-        return compile(src.filename, src.source, compilerOptions);
-    }).then(js => {
-        return eval_js(js, compilerOptions);
-    });
-};
-
 var getLocalGoog = (exports) => {
     var localGoog = Object.create(globalGoog);
     // exportSymbol doesn't do anything by itself, only when closure compiler is involved.
@@ -115,15 +97,39 @@ var eval_js = (js) => {
     return exports;
 };
 
-var eval_cljs = (filename, cljs_source) => {
-     var compilerOptions = {
+var DEFAULT_COMPILER_OPTIONS = {
          'logger': customLogger, // console is the object on which log() error(), etc are invoked.
          'source_loader': dummySourceLoader,
          'js_eval': eval_js
      };
+
+var nsNameToId = (nsName) => ({name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")});
+
+// load cljs source, compile and evalute compiled js on demand
+var loadDepNamespaces = (nsNames, compilerOptions) => {
+    var nsIds = nsNames.filter(nsName => !nsAvailable(nsName) && !namespaces_under_evaluation[nsName]).map(nsNameToId);
+    // console.log("loadDepNamespaces loading missing namespaces", nsIds);
+    return Promise.all(nsIds.map(nsId => new Promise((resolve, reject) => {
+        compilerOptions.source_loader(nsId, resolve);
+    }))).then(sources => {
+        console.log("sources", sources);
+        return sources.map(src => eval_cljs(src.filename, src.source, compilerOptions));
+    });
+};
+
+var namespaces_under_evaluation = {};
+
+var eval_cljs = (filename, cljs_source, compilerOptions) => {
+     var compilerOptions = compilerOptions || DEFAULT_COMPILER_OPTIONS;
      return compile(filename, cljs_source, compilerOptions).then(
         compiler_output => {
-            compilerOptions.js_eval(compiler_output.compiled_js);
+            compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = true);
+            return loadDepNamespaces(compiler_output.dependencies, compilerOptions).then(
+                _ => compilerOptions.js_eval(compiler_output.compiled_js)).then(
+                result => {
+                    compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = false);
+                    return result;
+                });
         },
         err => {
             console.log("got compilation error", err);
@@ -136,11 +142,13 @@ var test = (filename, code) => {
 };
 
 var run = () => {
+/*
 // simple require-macro
 test("test1", `
     (ns my.test1 (:require-macros my.math))
     (println (my.math/triple 5))
 `);
+*/
 
 // simple require-function
 test("test2", `
@@ -148,6 +156,7 @@ test("test2", `
     (println (my-math-alias/myfunc 5 6))
 `);
 
+/*
 // simple export function 
 test("test3", `
     (ns my.test3)
@@ -212,5 +221,5 @@ test("test10", `
     (defmacro triplem [x] (* 3 x))
     (defn triplef [x] (* 3 x))
 `);
-
+*/
 };
