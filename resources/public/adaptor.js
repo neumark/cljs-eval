@@ -108,7 +108,7 @@ var nsNameToId = (nsName) => ({name: nsName, macros: nsName.endsWith("$macros"),
 // load cljs source, compile and evalute compiled js on demand
 var loadDepNamespaces = (nsNames, compilerOptions) => {
     var nsIds = nsNames.filter(nsName => !nsAvailable(nsName) && !namespaces_under_evaluation[nsName]).map(nsNameToId);
-    // console.log("loadDepNamespaces loading missing namespaces", nsIds);
+    console.log("loadDepNamespaces loading missing namespaces", nsIds);
     return Promise.all(nsIds.map(nsId => new Promise((resolve, reject) => {
         compilerOptions.source_loader(nsId, resolve);
     }))).then(sources => {
@@ -120,12 +120,16 @@ var loadDepNamespaces = (nsNames, compilerOptions) => {
 var namespaces_under_evaluation = {};
 
 var eval_cljs = (filename, cljs_source, compilerOptions) => {
+    console.log("eval_cljs", filename);
      var compilerOptions = compilerOptions || DEFAULT_COMPILER_OPTIONS;
      return compile(filename, cljs_source, compilerOptions).then(
         compiler_output => {
             compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = true);
             return loadDepNamespaces(compiler_output.dependencies, compilerOptions).then(
-                _ => compilerOptions.js_eval(compiler_output.compiled_js)).then(
+                _ => {
+                    console.log("deps of ", filename, "loaded, evaluating compiled js");
+                    return compilerOptions.js_eval(compiler_output.compiled_js);
+                }).then(
                 result => {
                     compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = false);
                     return result;
