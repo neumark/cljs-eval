@@ -56,7 +56,7 @@ var customLogger = {
 var overrideMethod = function (localGoog, methodName, methodFn, callSuper) {
     localGoog[methodName] = function() {
         methodFn.apply(localGoog, arguments);
-        if (!!callSuper) {
+        if (callSuper !== false) {
             globalGoog[methodName].apply(localGoog, arguments);
         }
     };
@@ -81,6 +81,18 @@ var nsAvailable = (nsName) => {
     return assertFields(globalGoog.global, nsName.split('\.'));
 };
 
+var patchedGoogRequire = function(nsName) {
+    if (!nsAvailable(nsName)) {
+        console.log("detected unavailable namespace", nsName);
+        /*
+        if (globalGoog.global.cljs_eval.core.has_compiled_ns(nsName)) {
+            console.log("compiled js source for namespace available, evaluating");
+            // TODO: pass sandboxedEval as js eval function
+            globalGoog.global.cljs_eval.core.eval_compiled_ns(nsName, {});
+        }*/
+    }
+};
+
 $tw.getLocalGoog = (exports) => {
     var localGoog = Object.create(globalGoog);
     // exportSymbol doesn't do anything by itself, only when closure compiler is involved.
@@ -89,16 +101,7 @@ $tw.getLocalGoog = (exports) => {
     }); 
     // require doesn't do anything by default, but it needs to execute compiled namespaces on demand
     // if they are not available.
-    overrideMethod(localGoog, "require", function(nsName) {
-        if (!nsAvailable(nsName)) {
-            console.log("detected unavailable namespace", nsName);
-            if (globalGoog.global.cljs_eval.core.has_compiled_ns(nsName)) {
-                console.log("compiled js source for namespace available, evaluating");
-                // TODO: pass sandboxedEval as js eval function
-                globalGoog.global.cljs_eval.core.eval_compiled_ns(nsName, {});
-            }
-        }
-    });
+    overrideMethod(localGoog, "require", patchedGoogRequire, false);
     // provide ensures ns object, eg: window.name.namespace is defined.
     overrideMethod(localGoog, "provide", function() { console.log("provide", arguments); });
     return localGoog;
