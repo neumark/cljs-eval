@@ -122,7 +122,9 @@ var eval_cljs = (filename, cljs_source) => {
          'js_eval': eval_js
      };
      return compile(filename, cljs_source, compilerOptions).then(
-        compilerOptions.js_eval,
+        compiler_output => {
+            compilerOptions.js_eval(compiler_output.compiled_js);
+        },
         err => {
             console.log("got compilation error", err);
         });

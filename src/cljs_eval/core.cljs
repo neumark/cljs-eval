@@ -85,17 +85,27 @@
       (let [new-cache-entries (apply hash-map (mapcat (fn [ns] [ns (make-compiled-ns ns compiled-js)]) defined-namespaces))]
         (println "cache entry for" defined-namespaces new-cache-entries)
         (swap! output-cache merge new-cache-entries)))
-  nil))
+    nil))
+
+(defn get-ns-dependencies [ns-analysis]
+  (let [reqs (vals (:requires ns-analysis))
+        req-macros (vals (:require-macros ns-analysis))]
+    (-> (concat
+         reqs
+         (map #(symbol (str % "$macros")) req-macros))
+        set
+        vec)))
 
 (defn make-compile-cb [on-success on-failure]
   (fn [compiler-result] (if (:value compiler-result)
                           (let [compiled-js (:value compiler-result)
-                                defined-namespaces (get-defined-namespaces compiled-js)]
+                                defined-namespaces (get-defined-namespaces compiled-js)
+                                dependencies (mapcat #(get-ns-dependencies (get-ns-cached-analysis %)) defined-namespaces)]
                             (do
                               (println "compiler output" compiled-js)
-                              (println "cached analysis" (get-ns-cached-analysis (first defined-namespaces)))
                               (write-output-cache! defined-namespaces compiled-js)
-                              (on-success compiled-js)))
+                              (on-success (clj->js {:dependencies dependencies
+                                                    :compiled_js compiled-js}))))
                           (let [error (:error compiler-result)]
                             (on-failure (js-obj
                                          "message" (.-message error)
