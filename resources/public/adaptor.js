@@ -113,7 +113,7 @@ var loadDepNamespaces = (nsNames, compilerOptions) => {
         compilerOptions.source_loader(nsId, resolve);
     }))).then(sources => {
         console.log("sources", sources);
-        return sources.map(src => eval_cljs(src.filename, src.source, compilerOptions));
+        return Promise.all(sources.map(src => eval_cljs(src.filename, src.source, compilerOptions)));
     });
 };
 
@@ -146,13 +146,13 @@ var test = (filename, code) => {
 };
 
 var run = () => {
-/*
+
 // simple require-macro
 test("test1", `
     (ns my.test1 (:require-macros my.math))
     (println (my.math/triple 5))
 `);
-*/
+
 
 // simple require-function
 test("test2", `
@@ -160,7 +160,7 @@ test("test2", `
     (println (my-math-alias/myfunc 5 6))
 `);
 
-/*
+
 // simple export function 
 test("test3", `
     (ns my.test3)
@@ -225,5 +225,5 @@ test("test10", `
     (defmacro triplem [x] (* 3 x))
     (defn triplef [x] (* 3 x))
 `);
-*/
+
 };
