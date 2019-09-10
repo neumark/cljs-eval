@@ -1,6 +1,10 @@
 var globalGoog = window.goog;
 // allow redefinition of namespaces
 goog.isProvided_ = (_) => false;
+// because of the change above, goog.require
+// now throws errors. Since it doesn't do anything
+// we can just get rid of it.
+goog.require = () => {};
 
 // based on TW5/boot/boot.js
 var sandboxedEval = function(code,context) {
@@ -34,8 +38,17 @@ var dummySourceLoader = (ns_id, cb) => {
     if (ns_id.name === 'my.math') {
         cb({filename: "my/math.clj",
             source: ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))"});
+    } else {
+        console.log("no source for", ns_id, "returning null");
+        cb(null);
     }
-    cb(null);
+};
+
+var recursiveDepLoader = (wrappedSourceLoader) => {
+    return (ns_id, cb) => {
+
+
+    };
 };
 
 var compile = (filename, source, options) => {
@@ -81,55 +94,44 @@ var loadNamespaceJIT = (nsName, compilerOptions) => {
     }).then(src => {
         return compile(src.filename, src.source, compilerOptions);
     }).then(js => {
-        return evaljs(js, compilerOptions);
+        return eval_js(js, compilerOptions);
     });
 };
 
-var patchedGoogRequire = async (nsName, compilerOptions) => {
-    if (!nsAvailable(nsName)) {
-        console.log("detected unavailable namespace", nsName);
-        // goog.require is sync, but sourceLoader and compiler have sync interfaces.
-        // to do just in time code loading, we need to await.
-        if (compilerOptions) {
-            return await loadNamespaceJIT(nsName, compilerOptions);
-        }
-    }
-    return null;
-};
-
-var getLocalGoog = (exports, compilerOptions) => {
+var getLocalGoog = (exports) => {
     var localGoog = Object.create(globalGoog);
     // exportSymbol doesn't do anything by itself, only when closure compiler is involved.
     overrideMethod(localGoog, "exportSymbol", function(name, value) {
         exports[removeNSPrefix(name)] = value;
     }); 
-    // require doesn't do anything by default, but it needs to execute compiled namespaces on demand
-    // if they are not available.
-    overrideMethod(localGoog, "require", async (nsName) => patchedGoogRequire(nsName, compilerOptions), false);
-    // provide ensures ns object, eg: window.name.namespace is defined.
-    overrideMethod(localGoog, "provide", function() { console.log("provide", arguments); });
     return localGoog;
 };
 
-var evaljs = (js, compilerOptions) => {
-   var exports = {};
-   var localGoog = getLocalGoog(exports, compilerOptions);
-   //console.log(name, code, js);
-   sandboxedEval(js, {goog: localGoog, exports}); 
+var eval_js = (js) => {
+    var exports = {};
+    var localGoog = getLocalGoog(exports);
+    //console.log(name, code, js);
+    sandboxedEval(js, {goog: localGoog, exports});
+    return exports;
 };
 
- var test = (filename, code) => {
+var eval_cljs = (filename, cljs_source) => {
      var compilerOptions = {
          'logger': customLogger, // console is the object on which log() error(), etc are invoked.
          'source_loader': dummySourceLoader,
-         'js_eval': evaljs
+         'js_eval': eval_js
      };
-     return compile(filename, code, compilerOptions).then(
-        js => evaljs(js, compilerOptions),
+     return compile(filename, cljs_source, compilerOptions).then(
+        compilerOptions.js_eval,
         err => {
             console.log("got compilation error", err);
         });
- };
+};
+
+var test = (filename, code) => {
+    // TODO assertions
+    return eval_cljs(filename, code);
+};
 
 var run = () => {
 // simple require-macro
@@ -140,8 +142,8 @@ test("test1", `
 
 // simple require-function
 test("test2", `
-    (ns my.test2 (:require my.math))
-    (println (my.math/myfunc 5 6))
+    (ns my.test2 (:require [my.math :as my-math-alias]))
+    (println (my-math-alias/myfunc 5 6))
 `);
 
 // simple export function 

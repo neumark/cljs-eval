@@ -20,7 +20,7 @@
   (symbol (str name (if macros "$macros" ""))))
 
 (defn get-cached-compiled-ns [cache-key]
-  (get @output-cache cache-key))
+  (get-in @output-cache [cache-key]))
 
 (defn invoke-source-loader [source-loader {:keys [name macros path] :as ns-id} cb]
   (source-loader (clj->js ns-id) #(cb {:lang :clj :source (gobj/get % "source")})))
@@ -60,6 +60,14 @@
       (map extract-provided-ns)
       (filter identity)))
 
+(defn foobar []
+  (do
+    (println "running foobar")
+    (get-in (:cljs.analyzer/namespaces (deref @compiler-state)) ['my.test8] )))
+
+(defn get-ns-cached-analysis [ns]
+  (get-in (:cljs.analyzer/namespaces (deref @compiler-state)) [ns]))
+
 (defn make-compiled-ns [ns compiled-js]
   {:lang :js
    :name ns
@@ -67,24 +75,26 @@
    :source compiled-js
    ; read analysis output from compiler's state
    ; I assume any namespace goog.provided-ed by the output JS is present in the compiler's analysis cache
-   :cache (get (:cljs.analyzer/namespaces (deref @compiler-state)) ns)
+   :cache (get-ns-cached-analysis ns)
   })
 
-(defn write-output-cache! [compiled-js]
-  (if-let [defined-ns (get-defined-namespaces compiled-js)]
+(defn write-output-cache! [defined-namespaces compiled-js]
+  (if (> (count defined-namespaces) 0)
     (do
-      (println "found definitions for namespaces" defined-ns)
-      (let [new-cache-entries (apply hash-map (mapcat (fn [ns] [ns (make-compiled-ns ns compiled-js)]) defined-ns))]
-        (println "cache entry for" defined-ns new-cache-entries)
+      (println "found definitions for namespaces" defined-namespaces)
+      (let [new-cache-entries (apply hash-map (mapcat (fn [ns] [ns (make-compiled-ns ns compiled-js)]) defined-namespaces))]
+        (println "cache entry for" defined-namespaces new-cache-entries)
         (swap! output-cache merge new-cache-entries)))
   nil))
 
 (defn make-compile-cb [on-success on-failure]
   (fn [compiler-result] (if (:value compiler-result)
-                          (let [compiled-js (:value compiler-result)]
+                          (let [compiled-js (:value compiler-result)
+                                defined-namespaces (get-defined-namespaces compiled-js)]
                             (do
                               (println "compiler output" compiled-js)
-                              (write-output-cache! compiled-js)
+                              (println "cached analysis" (get-ns-cached-analysis (first defined-namespaces)))
+                              (write-output-cache! defined-namespaces compiled-js)
                               (on-success compiled-js)))
                           (let [error (:error compiler-result)]
                             (on-failure (js-obj
