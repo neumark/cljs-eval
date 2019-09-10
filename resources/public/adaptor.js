@@ -1,13 +1,9 @@
-console.log("straight ol' js");
-
-var $tw = {};
 var globalGoog = window.goog;
 // allow redefinition of namespaces
 goog.isProvided_ = (_) => false;
 
-
 // based on TW5/boot/boot.js
-var sandboxedEval = function(code,context,filename) {
+var sandboxedEval = function(code,context) {
 	var contextCopy = Object.assign({} ,context);
 	// Get the context variables as a pair of arrays of names and values
 	var contextNames = [], contextValues = [];
@@ -19,8 +15,8 @@ var sandboxedEval = function(code,context,filename) {
 	code = "(function(" + contextNames.join(",") + ") {(function(){\n" + code + "\n;})();\nreturn exports;\n})\n";
 	// Compile the code into a function
 	var fn;
-        // TODO: cljs compiler also specifies sourceURL, no need to give this twice (with different values), but harmless.
-		fn = window["eval"](code + "\n\n//# sourceURL=" + filename);
+        // NOTE: cljs compiler also specifies sourceURL,  need to give this twice (with different values)? harmless if redundant.
+		fn = window["eval"](code);
 	// Call the function and return the exports
 	return fn.apply(null,contextValues);
 };
@@ -32,24 +28,20 @@ var customLogger = {
     error: (x) => console.error("customLogger " + x)
 };
 
+var dummySourceLoader = (ns_id, cb) => {
+    // this will be the method to load cljs source from tiddlers
+    console.log("trying to load source for", ns_id);
+    if (ns_id.name === 'my.math') {
+        cb({filename: "my/math.clj",
+            source: ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))"});
+    }
+    cb(null);
+};
 
- var compile = (filename, source) => {
+var compile = (filename, source, options) => {
      return new Promise((resolve, reject) => {
-         globalGoog.global.cljs_eval.core.compile(source, {
-             'name': filename,
-             'logger': customLogger, // console is the object on which log() error(), etc are invoked.
-             'on_success': resolve,
-             'on_failure': reject,
-             'source_loader': (ns_id) => {
-                 // this will be the method to load cljs source from tiddlers
-                 console.log("trying to load source for", ns_id);
-                 if (ns_id.name === 'my.math') {
-                     return ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))";
-                 }
-                 return null;
-             }
-             // js_eval option left to default value
-         });
+         var extendedOpts = Object.assign({}, options, {on_success: resolve, on_failure: reject, name: filename});
+         globalGoog.global.cljs_eval.core.compile(source, extendedOpts);
      });
 };
 
@@ -81,19 +73,31 @@ var nsAvailable = (nsName) => {
     return assertFields(globalGoog.global, nsName.split('\.'));
 };
 
-var patchedGoogRequire = function(nsName) {
-    if (!nsAvailable(nsName)) {
-        console.log("detected unavailable namespace", nsName);
-        /*
-        if (globalGoog.global.cljs_eval.core.has_compiled_ns(nsName)) {
-            console.log("compiled js source for namespace available, evaluating");
-            // TODO: pass sandboxedEval as js eval function
-            globalGoog.global.cljs_eval.core.eval_compiled_ns(nsName, {});
-        }*/
-    }
+// load cljs source, compile and evalute compiled js on demand
+var loadNamespaceJIT = (nsName, compilerOptions) => {
+    var namespaceId = {name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")};
+    return new Promise((resolve, reject) => {
+        compilerOptions.source_loader(namespaceId, resolve);
+    }).then(src => {
+        return compile(src.filename, src.source, compilerOptions);
+    }).then(js => {
+        return evaljs(js, compilerOptions);
+    });
 };
 
-$tw.getLocalGoog = (exports) => {
+var patchedGoogRequire = async (nsName, compilerOptions) => {
+    if (!nsAvailable(nsName)) {
+        console.log("detected unavailable namespace", nsName);
+        // goog.require is sync, but sourceLoader and compiler have sync interfaces.
+        // to do just in time code loading, we need to await.
+        if (compilerOptions) {
+            return await loadNamespaceJIT(nsName, compilerOptions);
+        }
+    }
+    return null;
+};
+
+var getLocalGoog = (exports, compilerOptions) => {
     var localGoog = Object.create(globalGoog);
     // exportSymbol doesn't do anything by itself, only when closure compiler is involved.
     overrideMethod(localGoog, "exportSymbol", function(name, value) {
@@ -101,20 +105,27 @@ $tw.getLocalGoog = (exports) => {
     }); 
     // require doesn't do anything by default, but it needs to execute compiled namespaces on demand
     // if they are not available.
-    overrideMethod(localGoog, "require", patchedGoogRequire, false);
+    overrideMethod(localGoog, "require", async (nsName) => patchedGoogRequire(nsName, compilerOptions), false);
     // provide ensures ns object, eg: window.name.namespace is defined.
     overrideMethod(localGoog, "provide", function() { console.log("provide", arguments); });
     return localGoog;
 };
 
- var test = (name, code) => {
-     compile(name, code).then(
-         js => {
-            var exports = {};
-            var jsWithPrelude = "var goog = $tw.getLocalGoog(exports);\n" + js
-            console.log(name, code, jsWithPrelude);
-            sandboxedEval(jsWithPrelude, {$tw, exports}, name); 
-         },
+var evaljs = (js, compilerOptions) => {
+   var exports = {};
+   var localGoog = getLocalGoog(exports, compilerOptions);
+   //console.log(name, code, js);
+   sandboxedEval(js, {goog: localGoog, exports}); 
+};
+
+ var test = (filename, code) => {
+     var compilerOptions = {
+         'logger': customLogger, // console is the object on which log() error(), etc are invoked.
+         'source_loader': dummySourceLoader,
+         'js_eval': evaljs
+     };
+     return compile(filename, code, compilerOptions).then(
+        js => evaljs(js, compilerOptions),
         err => {
             console.log("got compilation error", err);
         });
