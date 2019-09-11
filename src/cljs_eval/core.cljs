@@ -125,8 +125,7 @@
                        ; normally, the compiler will not call this method when code is compiled, this
                        ; must be done manually in the callback fn passed to compile-str
                        :cache-source update-cache-handler
-                       :source-map true
-                       :context :return}]
+                       :source-map true}]
     (binding [cljs.core/*print-newline* false
               cljs.core/*print-fn* (fn []
                                      (let [xs (js-arguments)]

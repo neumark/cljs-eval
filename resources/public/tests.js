@@ -4,16 +4,39 @@ var run = (code) => {
     return eval_cljs("test_" + run_counter, code);
 };
 var getResult = (p) => p.then(x => x.result);
+var getExports = (p) => p.then(x => {console.log(x);x.exports});
 
 describe("CLJS_EVAL", function() {
 
   beforeEach(function() {
-    window.cljs_eval.core.clear_cache()
+    // window.cljs_eval.core.clear_cache();
   });
 
   it("should correctly evaluate simple numeric expressions", async function() {
     expect(await getResult(run('(+ 1 2)'))).toEqual(3);
   });
+
+  it("evaluates to last expression", async function() {
+    expect(await getResult(run('(+ 1 2)(* 2 8)'))).toEqual(16);
+  });
+
+  it("should correctly use host interop", async function() {
+    expect(await getResult(run('(js/Math.round 0.5)'))).toEqual(1);
+  });
+
+    /*
+  it("should correctly export values with def (no ns)", async function() {
+    expect(await getExports(run('(def ^:export foobar 4)'))).toEqual({foobar: 4});
+  });*/
+    /*
+// simple export data
+test("test4", `
+    (ns my.test4)
+    (def ^:export foobar [1 2 3 4])
+`);
+*/
+
+
 
 });
 
