@@ -10,11 +10,13 @@
 (defonce compiler-state (atom (cjs/empty-state)))
 (defonce output-cache (atom {}))
 
+(defn noop [& _args] nil)
+
 (defn on-js-reload []
   ;; optionally touch your app-state to force rerendering depending on
   ;; your application
   ;; (swap! app-state update-in [:__figwheel_counter] inc)
-  (println "js reloaded"))
+  (noop "js reloaded"))
 
 (defn ns-to-cache-key [name macros]
   (symbol (str name (if macros "$macros" ""))))
@@ -27,14 +29,14 @@
 
 (defn get-loader [source-loader]
   (fn [{:keys [name macros] :as ns-id} cb]
-    (println "Loading dependency" ns-id)
+    ;(println "Loading dependency" ns-id)
     (let [cached-compiled-ns (get-cached-compiled-ns (ns-to-cache-key name macros))]
       (if cached-compiled-ns
         (do
-          (println "got cached compiled namespace for " ns-id cached-compiled-ns)
+          ;(println "got cached compiled namespace for " ns-id cached-compiled-ns)
           (cb cached-compiled-ns))
         (do
-          (println "no cached compiler output for " ns-id " fallback to source-loader")
+          ;(println "no cached compiler output for " ns-id " fallback to source-loader")
           (invoke-source-loader source-loader ns-id cb))))))
 
 (defn set-cached-compiled-ns! [cache-key compiled-ns]
@@ -42,11 +44,9 @@
 
 (defn update-cache-handler [compiled-ns cb]
   (do
-    (js/console.log "updating cache")
     (set-cached-compiled-ns! (str (get-in compiled-ns [:cache :name])) compiled-ns)
     (cb {:value nil})))
 
-(defn noop [& _args] nil)
 
 (def goog-provide-re #"^goog\.provide\(\'([^\s]+)\'\);$")
 
@@ -59,11 +59,6 @@
   (->> (cljstr/split-lines compiled-js)
       (map extract-provided-ns)
       (filter identity)))
-
-(defn foobar []
-  (do
-    (println "running foobar")
-    (get-in (:cljs.analyzer/namespaces (deref @compiler-state)) ['my.test8] )))
 
 (defn get-ns-cached-analysis [ns]
   (get-in (:cljs.analyzer/namespaces (deref @compiler-state)) [ns]))
@@ -81,9 +76,9 @@
 (defn write-output-cache! [defined-namespaces compiled-js]
   (if (> (count defined-namespaces) 0)
     (do
-      (println "found definitions for namespaces" defined-namespaces)
+      ;(println "found definitions for namespaces" defined-namespaces)
       (let [new-cache-entries (apply hash-map (mapcat (fn [ns] [ns (make-compiled-ns ns compiled-js)]) defined-namespaces))]
-        (println "cache entry for" defined-namespaces new-cache-entries)
+        ;(println "cache entry for" defined-namespaces new-cache-entries)
         (swap! output-cache merge new-cache-entries)))
     nil))
 
@@ -102,7 +97,7 @@
                                 defined-namespaces (get-defined-namespaces compiled-js)
                                 dependencies (mapcat #(get-ns-dependencies (get-ns-cached-analysis %)) defined-namespaces)]
                             (do
-                              (println "compiler output" compiled-js)
+                              ;(println "compiler output" compiled-js)
                               (write-output-cache! defined-namespaces compiled-js)
                               (on-success (clj->js {:namespaces defined-namespaces
                                                     :dependencies dependencies
@@ -130,7 +125,8 @@
                        ; normally, the compiler will not call this method when code is compiled, this
                        ; must be done manually in the callback fn passed to compile-str
                        :cache-source update-cache-handler
-                       :source-map true}]
+                       :source-map true
+                       :context :return}]
     (binding [cljs.core/*print-newline* false
               cljs.core/*print-fn* (fn []
                                      (let [xs (js-arguments)]
@@ -149,11 +145,10 @@
    :js-eval (or (. js-opts -js-eval) js/eval)})
 
 
-(defn ^:export dump-output-cache []
-  (pprint @output-cache))
-
-(defn ^:export dump-compiler-state []
-  (pprint @compiler-state))
+(defn ^:export clear-cache []
+  (do
+    (reset! compiler-state (cjs/empty-state))
+    (reset! output-cache {})))
 
 (defn ^:export compile [cljs-source js-opts]
   (let [options (parse-js-opts js-opts)]
