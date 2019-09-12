@@ -1,10 +1,18 @@
 var run_counter = 0;
 var run = (code) => {
     run_counter += 1;
-    return eval_cljs("test_" + run_counter, code);
+    var _cb = null;
+    var returnPromise = new Promise((resolve, reject) => {
+        _cb = resolve;
+    });
+    // TODO: this wrapping plus a TRY / CATCH should be refactored into a macro
+    return Promise.all([eval_cljs("test_" + run_counter, code, {context: {result: _cb}}), returnPromise]).then(
+        (asyncValues) => {
+            return {exports: asyncValues[0].exports, result: asyncValues[1]};
+        });
 };
-var getResult = (p) => p.then(x => x.result);
-var getExports = (p) => p.then(x => {console.log(x);x.exports});
+var getResult = (code) => run(code).then(x => x.result);
+var getExports = (code) => run(code).then(x => x.exports);
 
 describe("CLJS_EVAL", function() {
 
@@ -13,16 +21,55 @@ describe("CLJS_EVAL", function() {
   });
 
   it("should correctly evaluate simple numeric expressions", async function() {
-    expect(await getResult(run('(+ 1 2)'))).toEqual(3);
+    expect(await getResult('(js/result (+ 1 2))')).toEqual(3);
   });
 
-  it("evaluates to last expression", async function() {
-    expect(await getResult(run('(+ 1 2)(* 2 8)'))).toEqual(16);
+  it("can evaluate more complex forms", async function() {
+    expect(await getResult(`(js/result (let [x 2
+                                             f (fn [y] (* 2 y))]
+                                            (do
+                                                (+ 2 1)
+                                                (* (f 2) x 3))))`)).toEqual(24);
   });
 
   it("should correctly use host interop", async function() {
-    expect(await getResult(run('(js/Math.round 0.5)'))).toEqual(1);
+    expect(await getResult('(js/result (js/Math.round 0.5))')).toEqual(1);
   });
+
+  
+  it("can use defn within code", async function() {
+    expect(await getResult(`
+        (ns test.simple_defn)
+        (defn foo [x] (* 2 x))
+        (+ 1 2)
+        (js/result (foo 3))
+        `)).toEqual(6);
+  });
+
+  // note: CLJS compiler bug (as of [org.clojure/clojurescript "1.10.520"])
+  // without the (+ 1 2), the compiler produces invalid code when exporting in default NS.
+  it("can export symbols (default ns)", async function() {
+    var result = await run(`
+        (def ^:export foo 42)
+        (js/result 3)
+    `);
+    expect(result.exports).toEqual({foo: 42});
+    expect(result.result).toEqual(3);
+    expect(goog.global.cljs.user.foo).toEqual(42);
+  });
+
+  it("can export functions (declared ns)", async function() {
+    var result = await run(`
+        (ns test.defn_test)
+        (defn ^:export foo [x] (* 42 x))
+        (js/result)
+    `);
+    console.log(result);
+    expect(result.exports.foo(2)).toEqual(84);
+    expect(goog.global.test.defn_test.foo(2)).toEqual(84);
+  });
+
+
 
     /*
   it("should correctly export values with def (no ns)", async function() {

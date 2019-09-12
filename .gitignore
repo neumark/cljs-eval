@@ -14,3 +14,4 @@ pom.xml
 ./resources/public/js
 *.swp
 .rebel_readline_history
+node_modules/

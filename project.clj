@@ -8,7 +8,8 @@
 
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/clojurescript "1.10.520"]
-                 [org.clojure/core.async  "0.4.500"]]
+                 [org.clojure/core.async  "0.4.500"]
+                 [com.cognitect/transit-cljs "0.8.256"]]
 
   :plugins [[lein-figwheel "0.5.19"]
             [lein-cljsbuild "1.1.7" :exclusions [[org.clojure/clojure]]]]
@@ -34,6 +35,7 @@
                            :output-to "resources/public/js/compiled/cljs_eval.js"
                            :output-dir "resources/public/js/compiled/out"
                            :source-map-timestamp true
+                           :foreign-libs [{:file "src" :module-type :es6}]
                            ;; To console.log CLJS data-structures make sure you enable devtools in Chrome
                            ;; https://github.com/binaryage/cljs-devtools
                            :preloads [devtools.preload]}}
@@ -45,6 +47,7 @@
                 :compiler {:output-to "target/cljs_eval.min.js"
                            :main cljs-eval.core
                            :optimizations :advanced
+                           :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print false}}
                {:id "bundle"
                 :source-paths ["src"]
@@ -52,6 +55,7 @@
                            :output-to "resources/public/js/compiled/cljs_eval_bundle.js"
                            :main cljs-eval.core
                            :optimizations :simple
+                           :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print true}}]}
 
 

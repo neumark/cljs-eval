@@ -1,0 +1,6 @@
+{
+    "dependencies": {},
+    "devDependencies": {
+        "@cljs-oss/module-deps": "^1.1.1"
+    }
+}

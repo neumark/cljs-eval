@@ -1,9 +1,12 @@
 (ns cljs-eval.core
   (:require [cljs.js :as cjs]
             [cljs.pprint :refer [pprint]]
+            [cljs.analyzer :as ana]
             [goog.array :as garray]
             [goog.object :as gobj :refer [get]]
-            [clojure.string :as cljstr :refer [split-lines, replace]]))
+            [clojure.string :as cljstr :refer [split-lines, replace]]
+            [js.test :as test]))
+
 ; based on http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
 
 ;; define your app data so that it doesn't get over-written on reload
@@ -61,7 +64,7 @@
       (filter identity)))
 
 (defn get-ns-cached-analysis [ns]
-  (get-in (:cljs.analyzer/namespaces (deref @compiler-state)) [ns]))
+  (get-in @compiler-state [::ana/namespaces ns]))
 
 (defn make-compiled-ns [ns compiled-js]
   {:lang :js
@@ -125,8 +128,9 @@
                        ; normally, the compiler will not call this method when code is compiled, this
                        ; must be done manually in the callback fn passed to compile-str
                        :cache-source update-cache-handler
+                       ;:context :expr
                        :source-map true}]
-    (binding [cljs.core/*print-newline* false
+    (binding [cljs.core/*print-newline* true
               cljs.core/*print-fn* (fn []
                                      (let [xs (js-arguments)]
                                        (.apply (.-log logger) logger (garray/clone xs))))
@@ -152,3 +156,6 @@
 (defn ^:export compile [cljs-source js-opts]
   (let [options (parse-js-opts js-opts)]
     (do-compile cljs-source options)))
+
+(defn ^:export call-test []
+  (test/sayHello))
