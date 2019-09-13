@@ -5,6 +5,7 @@
             [goog.array :as garray]
             [goog.object :as gobj :refer [get]]
             [clojure.string :as cljstr :refer [split-lines, replace]]
+            [cognitect.transit :as transit]
             [js.test :as test]))
 
 ; based on http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
@@ -159,3 +160,17 @@
 
 (defn ^:export call-test []
   (test/sayHello))
+
+;; copied from replumb source
+
+(defn transit-json->edn
+  [json]
+  (->> json (transit/read (transit/reader :json))))
+
+(defn edn->transit-json
+  [edn]
+  (->> edn (transit/write (transit/writer :json))))
+
+(defn ^:export dump-cache []
+  (edn->transit-json @output-cache))
+

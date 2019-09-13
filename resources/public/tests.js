@@ -46,8 +46,6 @@ describe("CLJS_EVAL", function() {
         `)).toEqual(6);
   });
 
-  // note: CLJS compiler bug (as of [org.clojure/clojurescript "1.10.520"])
-  // without the (+ 1 2), the compiler produces invalid code when exporting in default NS.
   // this works in dev mode, but cljs.user is factored out by gcc simple optimizations, so this wont compile
   it("can export symbols (default ns)", async function() {
     var result = await run(`
@@ -70,30 +68,10 @@ describe("CLJS_EVAL", function() {
     expect(goog.global.test.defn_test.foo(2)).toEqual(84);
   });
 
-
-
-    /*
-  it("should correctly export values with def (no ns)", async function() {
-    expect(await getExports(run('(def ^:export foobar 4)'))).toEqual({foobar: 4});
-  });*/
-    /*
-// simple export data
-test("test4", `
-    (ns my.test4)
-    (def ^:export foobar [1 2 3 4])
-`);
-*/
-
-
-
-});
+    
+}); // close describe()
 
 /*
-var test = (filename, code) => {
-    // TODO assertions
-    return eval_cljs(filename, code);
-};
-
 var run = () => {
 
 // simple require-macro

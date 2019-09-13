@@ -9,7 +9,8 @@
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/clojurescript "1.10.520"]
                  [org.clojure/core.async  "0.4.500"]
-                 [com.cognitect/transit-cljs "0.8.256"]]
+                 [com.cognitect/transit-cljs "0.8.256"]
+                 [cljsjs/babel-standalone "6.18.1-3"]]
 
   :plugins [[lein-figwheel "0.5.19"]
             [lein-cljsbuild "1.1.7" :exclusions [[org.clojure/clojure]]]]
@@ -35,7 +36,11 @@
                            :output-to "resources/public/js/compiled/cljs-standalone-dev.js"
                            :output-dir "resources/public/js/compiled/out"
                            :source-map-timestamp true
-                           :foreign-libs [{:file "src" :module-type :es6}]
+                           :foreign-libs [{:file "src" 
+                                           :module-type :es6
+                                           ;:preprocess cljsjs.babel-standalone/transform
+                                           ;:cljsjs.babel-standalone/babel-opts "{\"presets\": [\"env\"]}"
+                                           }]
                            ;; To console.log CLJS data-structures make sure you enable devtools in Chrome
                            ;; https://github.com/binaryage/cljs-devtools
                            :preloads [devtools.preload]}}
