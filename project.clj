@@ -1,4 +1,4 @@
-(defproject cljs-eval "0.1.0-SNAPSHOT"
+(defproject cljs-standalone "0.1.0-SNAPSHOT"
   :description "FIXME: write this!"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -23,16 +23,16 @@
                 ;; The presence of a :figwheel configuration here
                 ;; will cause figwheel to inject the figwheel client
                 ;; into your build
-                :figwheel {:on-jsload "cljs-eval.core/on-js-reload"
+                :figwheel {:on-jsload "cljs-standalone.core/on-js-reload"
                            ;; :open-urls will pop open your application
                            ;; in the default browser once Figwheel has
                            ;; started and compiled your application.
                            ;; Comment this out once it no longer serves you.
-                           :open-urls ["http://localhost:3449/index.html"]}
+                           :open-urls ["http://localhost:3449/SpecRunner.html"]}
 
-                :compiler {:main cljs-eval.core
+                :compiler {:main cljs-standalone.core
                            :asset-path "js/compiled/out"
-                           :output-to "resources/public/js/compiled/cljs_eval.js"
+                           :output-to "resources/public/js/compiled/cljs-standalone-dev.js"
                            :output-dir "resources/public/js/compiled/out"
                            :source-map-timestamp true
                            :foreign-libs [{:file "src" :module-type :es6}]
@@ -44,16 +44,18 @@
                ;; lein cljsbuild once min
                {:id "min"
                 :source-paths ["src"]
-                :compiler {:output-to "target/cljs_eval.min.js"
-                           :main cljs-eval.core
+                :compiler {:output-to "resources/public/js/compiled/min/cljs-standalone.min.js"
+                           :output-dir "resources/public/js/compiled/min/out"
+                           :main cljs-standalone.core
                            :optimizations :advanced
                            :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print false}}
                {:id "bundle"
                 :source-paths ["src"]
                 :compiler {
-                           :output-to "resources/public/js/compiled/cljs_eval_bundle.js"
-                           :main cljs-eval.core
+                           :output-to "resources/public/js/compiled/bundle/cljs-standalone.js"
+                           :output-dir "resources/public/js/compiled/bundle/out"
+                           :main cljs-standalone.core
                            :optimizations :simple
                            :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print true}}]}

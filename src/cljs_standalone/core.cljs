@@ -1,4 +1,4 @@
-(ns cljs-eval.core
+(ns cljs-standalone.core
   (:require [cljs.js :as cjs]
             [cljs.pprint :refer [pprint]]
             [cljs.analyzer :as ana]

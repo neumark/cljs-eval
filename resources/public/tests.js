@@ -48,6 +48,7 @@ describe("CLJS_EVAL", function() {
 
   // note: CLJS compiler bug (as of [org.clojure/clojurescript "1.10.520"])
   // without the (+ 1 2), the compiler produces invalid code when exporting in default NS.
+  // this works in dev mode, but cljs.user is factored out by gcc simple optimizations, so this wont compile
   it("can export symbols (default ns)", async function() {
     var result = await run(`
         (def ^:export foo 42)
