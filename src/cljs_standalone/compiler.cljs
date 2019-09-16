@@ -59,7 +59,7 @@
 
 (defn extract-provided-ns [compiled-js-line]
   (if-let [match (re-matches goog-provide-re compiled-js-line)]
-    (symbol (second match))
+    (symbol (demunge (second match)))
     nil))
 
 (defn get-defined-namespaces [compiled-js]
@@ -119,9 +119,10 @@
                             (do
                               ;(println "exports" exports)
                               (write-output-cache! defined-namespaces compiled-js)
-                              (on-success (clj->js {:namespaces defined-namespaces
-                                                    :dependencies dependencies
-                                                    :exports (map str exports)
+                              ; munge all symbols before passing to JS
+                              (on-success (clj->js {:namespaces (map munge defined-namespaces)
+                                                    :dependencies (map munge dependencies)
+                                                    :exports (->> exports (map str))
                                                     :compiled_js compiled-js}))))
                           (let [error (:error compiler-result)]
                             (on-failure (js-obj

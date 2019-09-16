@@ -38,7 +38,7 @@ describe("CLJS_EVAL", function() {
   
   it("can use defn within code", async function() {
     expect(await getResult(`
-        (ns test.simple_defn)
+        (ns test.simple-defn)
         (defn foo [x] (* 2 x))
         (+ 1 2)
         (js/result (foo 3))
@@ -58,7 +58,7 @@ describe("CLJS_EVAL", function() {
 
   it("exported symbols appear in exports if namespace declared", async function() {
     var result = await run(`
-        (ns test.export_test)
+        (ns test.export-test)
         (def ^:export foo 42)
         (js/result 3)
     `);
@@ -70,16 +70,29 @@ describe("CLJS_EVAL", function() {
 
   it("can export functions (declared ns)", async function() {
     var result = await run(`
-        (ns test.defn_test)
+        (ns test.defn-test)
         (defn ^:export foo [x] (* 42 x))
         (js/result)
     `);
-    console.log(result);
     expect(result.exports.foo(2)).toEqual(84);
     expect(goog.global.test.defn_test.foo(2)).toEqual(84);
   });
 
     
+  it("can export multi-arity functions", async function() {
+    var exports = await getExports(`
+        (ns test.defn-multi-arity)
+        (defn ^:export greet
+          ([] (greet "you"))
+          ([name] (str "Hello " name)))
+        (js/result (greet "x"))
+    `);
+    console.log(exports);
+    expect(Object.keys(exports)).toEqual(["greet"]);
+    expect(goog.global.test.defn_multi_arity.greet()).toEqual("Hello you");
+    expect(goog.global.test.defn_multi_arity.greet("y")).toEqual("Hello y");
+  });
+
 }); // close describe()
 
 /*
