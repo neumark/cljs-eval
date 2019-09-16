@@ -86,7 +86,7 @@
     nil))
 
 (defn get-ns-exports [ns-analysis]
-  (->> ns-analysis (vals) (filter #(= (:export %) true)) (map :name)))
+  (->> (:defs ns-analysis) (vals) (filter #(= (:export %) true)) (map :name)))
 
 
 (defn get-ns-dependencies [ns-analysis]
@@ -117,7 +117,7 @@
                               (write-output-cache! defined-namespaces compiled-js)
                               (on-success (clj->js {:namespaces defined-namespaces
                                                     :dependencies dependencies
-                                                    :exports exports
+                                                    :exports (map str exports)
                                                     :compiled_js compiled-js}))))
                           (let [error (:error compiler-result)]
                             (on-failure (js-obj

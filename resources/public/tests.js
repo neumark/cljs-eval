@@ -5,10 +5,9 @@ var run = (code) => {
     var returnPromise = new Promise((resolve, reject) => {
         _cb = resolve;
     });
-    // TODO: this wrapping plus a TRY / CATCH should be refactored into a macro
     return Promise.all([eval_cljs("test_" + run_counter, code, {context: {result: _cb}}), returnPromise]).then(
         (asyncValues) => {
-            return {exports: asyncValues[0].exports, result: asyncValues[1]};
+            return {exports: asyncValues[0], result: asyncValues[1]};
         });
 };
 var getResult = (code) => run(code).then(x => x.result);
@@ -47,15 +46,27 @@ describe("CLJS_EVAL", function() {
   });
 
   // this works in dev mode, but cljs.user is factored out by gcc simple optimizations, so this wont compile
-  it("can export symbols (default ns)", async function() {
+  it("exported symbols only appear in exports if namespace declared", async function() {
     var result = await run(`
+        (def ^:export foo 42)
+        (js/result 3)
+    `);
+    expect(result.exports).toEqual({});
+    expect(result.result).toEqual(3);
+    expect(goog.global.cljs.user.foo).toEqual(42);
+  });
+
+  it("exported symbols appear in exports if namespace declared", async function() {
+    var result = await run(`
+        (ns test.export_test)
         (def ^:export foo 42)
         (js/result 3)
     `);
     expect(result.exports).toEqual({foo: 42});
     expect(result.result).toEqual(3);
-    expect(goog.global.cljs.user.foo).toEqual(42);
+    expect(goog.global.test.export_test.foo).toEqual(42);
   });
+
 
   it("can export functions (declared ns)", async function() {
     var result = await run(`

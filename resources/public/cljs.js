@@ -46,18 +46,12 @@ var dummySourceLoader = (ns_id, cb) => {
 
 var compile = (filename, source, options) => {
      return new Promise((resolve, reject) => {
-         var extendedOpts = Object.assign({}, options, {on_success: resolve, on_failure: reject, name: filename});
+         var extendedOpts = Object.assign({}, options, {
+             on_success: resolve,
+             on_failure: reject,
+             name: filename});
          globalGoog.global.cljs_standalone.compiler.compile(source, extendedOpts);
      });
-};
-
-var overrideMethod = function (localGoog, methodName, methodFn, callSuper) {
-    localGoog[methodName] = function() {
-        methodFn.apply(localGoog, arguments);
-        if (callSuper !== false) {
-            globalGoog[methodName].apply(localGoog, arguments);
-        }
-    };
 };
 
 var removeNSPrefix = (symbolName) => {
@@ -79,22 +73,11 @@ var nsAvailable = (nsName) => {
     return assertFields(globalGoog.global, nsName.split('\.'));
 };
 
-var getLocalGoog = (exports) => {
-    var localGoog = Object.create(globalGoog);
-    // exportSymbol doesn't do anything by itself, only when closure compiler is involved.
-    overrideMethod(localGoog, "exportSymbol", function(name, value) {
-        exports[removeNSPrefix(name)] = value;
-    }); 
-    return localGoog;
-};
-
 var eval_js = (js, baseContext) => {
     var exports = {};
-    var localGoog = getLocalGoog(exports);
-    var context = Object.assign({}, {goog: localGoog, exports}, baseContext || {});
-    //console.log(name, code, js);
-    // unless compiler gets :context :return, result is always undefined
-    return {result: sandboxedEval(js, context), exports};
+    var context = Object.assign({}, {exports}, baseContext || {});
+    sandboxedEval(js, context);
+    return exports;
 };
 
 var DEFAULT_COMPILER_OPTIONS = {
@@ -128,8 +111,13 @@ var eval_cljs = (filename, cljs_source, compilerOptions) => {
             compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = true);
             return loadDepNamespaces(compiler_output.dependencies, compilerOptions).then(
                     _ => {
-                        // console.log("deps of ", filename, "loaded, evaluating compiled js");
-                        return compilerOptions.js_eval(compiler_output.compiled_js, compilerOptions.context);
+                        var exports = compilerOptions.js_eval(compiler_output.compiled_js, compilerOptions.context);
+                        // save exports
+                        compiler_output.exports.forEach(symbol => {
+                            var symbolParts = symbol.split("/");
+                            exports[symbolParts[1]] = goog.getObjectByName(symbol.replace("/", "."));
+                        });
+                        return exports;
                 }).then(
                     result => {
                         compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = false);
