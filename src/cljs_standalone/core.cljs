@@ -11,7 +11,7 @@
 ; based on http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
 
 ;; define your app data so that it doesn't get over-written on reload
-(defonce compiler-state (atom (cjs/empty-state)))
+(defonce compiler-state (cjs/empty-state)) ;empty-state is an atom already
 (defonce output-cache (atom {}))
 
 (defn noop [& _args] nil)
@@ -86,7 +86,13 @@
         (swap! output-cache merge new-cache-entries)))
     nil))
 
+(defn get-ns-exports [ns-analysis]
+  (->> ns-analysis (vals) (filter #(= (:export %) true)) (map :name)))
+
+
 (defn get-ns-dependencies [ns-analysis]
+  ; TODO: no need to return req-macros because those are not really dependencies: they've
+  ; already been evaluated by the time compilation is complete, therefore they are no longer needed.
   (let [reqs (vals (:requires ns-analysis))
         req-macros (vals (:require-macros ns-analysis))]
     (-> (concat
@@ -95,16 +101,24 @@
         set
         vec)))
 
+; compile-str doesn't return analysis information for the result of the compilation.
+; this could be fixed by re-implementing most of what compile-str does, but a cheaper
+; workaround is looking for goog.provides declarations in the output js.
+; one drawback of this approach is that when there is no ns declaration (and we're working in cljs.user),
+; the namespace is not detected.
+
 (defn make-compile-cb [on-success on-failure]
   (fn [compiler-result] (if (:value compiler-result)
                           (let [compiled-js (:value compiler-result)
                                 defined-namespaces (get-defined-namespaces compiled-js)
-                                dependencies (mapcat #(get-ns-dependencies (get-ns-cached-analysis %)) defined-namespaces)]
+                                dependencies (mapcat #(get-ns-dependencies (get-ns-cached-analysis %)) defined-namespaces)
+                                exports (mapcat #(get-ns-exports (get-ns-cached-analysis %)) defined-namespaces)]
                             (do
-                              ;(println "compiler output" compiled-js)
+                              ;(println "exports" exports)
                               (write-output-cache! defined-namespaces compiled-js)
                               (on-success (clj->js {:namespaces defined-namespaces
                                                     :dependencies dependencies
+                                                    :exports exports
                                                     :compiled_js compiled-js}))))
                           (let [error (:error compiler-result)]
                             (on-failure (js-obj
@@ -138,7 +152,7 @@
               cljs.core/*print-err-fn* (fn []
                                          (let [xs (js-arguments)]
                                            (.apply (.-error logger) logger (garray/clone xs))))]
-      (cjs/compile-str @compiler-state cljs-source name compiler-opts cb))))
+      (cjs/compile-str compiler-state cljs-source name compiler-opts cb))))
 
 (defn parse-js-opts [js-opts]
   {:on-success (or (. js-opts -on-success) noop)
