@@ -24,14 +24,14 @@
                 ;; The presence of a :figwheel configuration here
                 ;; will cause figwheel to inject the figwheel client
                 ;; into your build
-                :figwheel {:on-jsload "cljs-standalone.core/on-js-reload"
+                :figwheel {:on-jsload "cljs-standalone.compiler/on-js-reload"
                            ;; :open-urls will pop open your application
                            ;; in the default browser once Figwheel has
                            ;; started and compiled your application.
                            ;; Comment this out once it no longer serves you.
                            :open-urls ["http://localhost:3449/SpecRunner.html"]}
 
-                :compiler {:main cljs-standalone.core
+                :compiler {:main cljs-standalone.compiler
                            :asset-path "js/compiled/out"
                            :output-to "resources/public/js/compiled/cljs-standalone-dev.js"
                            :output-dir "resources/public/js/compiled/out"
@@ -51,7 +51,7 @@
                 :source-paths ["src"]
                 :compiler {:output-to "resources/public/js/compiled/min/cljs-standalone.min.js"
                            :output-dir "resources/public/js/compiled/min/out"
-                           :main cljs-standalone.core
+                           :main cljs-standalone.compiler
                            :optimizations :advanced
                            :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print false}}
@@ -60,7 +60,7 @@
                 :compiler {
                            :output-to "resources/public/js/compiled/bundle/cljs-standalone.js"
                            :output-dir "resources/public/js/compiled/bundle/out"
-                           :main cljs-standalone.core
+                           :main cljs-standalone.compiler
                            :optimizations :simple
                            :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print true}}]}

@@ -1,12 +1,11 @@
-(ns cljs-standalone.core
+(ns cljs-standalone.compiler
   (:require [cljs.js :as cjs]
             [cljs.pprint :refer [pprint]]
             [cljs.analyzer :as ana]
             [goog.array :as garray]
             [goog.object :as gobj :refer [get]]
             [clojure.string :as cljstr :refer [split-lines, replace]]
-            [cognitect.transit :as transit]
-            [js.test :as test]))
+            [cognitect.transit :as transit]))
 
 ; based on http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
 
@@ -162,6 +161,16 @@
    :source-loader (or (. js-opts -source-loader) (fn [_ cb] (cb nil)))
    :js-eval (or (. js-opts -js-eval) js/eval)})
 
+; copied from replumb source
+(defn transit-json->edn
+  [json]
+  (->> json (transit/read (transit/reader :json))))
+
+(defn edn->transit-json
+  [edn]
+  (->> edn (transit/write (transit/writer :json))))
+
+; --- PUBLIC API ---
 
 (defn ^:export clear-cache []
   (do
@@ -172,19 +181,6 @@
   (let [options (parse-js-opts js-opts)]
     (do-compile cljs-source options)))
 
-(defn ^:export call-test []
-  (test/sayHello))
-
-;; copied from replumb source
-
-(defn transit-json->edn
-  [json]
-  (->> json (transit/read (transit/reader :json))))
-
-(defn edn->transit-json
-  [edn]
-  (->> edn (transit/write (transit/writer :json))))
 
 (defn ^:export dump-cache []
   (edn->transit-json @output-cache))
-

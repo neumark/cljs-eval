@@ -47,7 +47,7 @@ var dummySourceLoader = (ns_id, cb) => {
 var compile = (filename, source, options) => {
      return new Promise((resolve, reject) => {
          var extendedOpts = Object.assign({}, options, {on_success: resolve, on_failure: reject, name: filename});
-         globalGoog.global.cljs_standalone.core.compile(source, extendedOpts);
+         globalGoog.global.cljs_standalone.compiler.compile(source, extendedOpts);
      });
 };
 
