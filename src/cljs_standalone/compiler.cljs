@@ -1,4 +1,5 @@
 (ns cljs-standalone.compiler
+  (:refer-clojure :exclude [eval])
   (:require [cljs.js :as cjs]
             [cljs.pprint :refer [pprint]]
             [cljs.analyzer :as ana]
@@ -7,7 +8,10 @@
             [clojure.string :as cljstr :refer [split-lines, replace]]
             [cognitect.transit :as transit]))
 
-; based on http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
+; sources:
+; http://nbeloglazov.com/2016/03/11/getting-started-with-self-hosted-cljs-part-3.html
+; https://github.com/swannodette/hello-cljsc/blob/master/src/hello_cljsc/core.clj
+; https://github.com/arichiardi/replumb/blob/master/src/cljs/replumb/cache.cljs
 
 ;; define your app data so that it doesn't get over-written on reload
 (defonce compiler-state (cjs/empty-state)) ;empty-state is an atom already
@@ -174,7 +178,7 @@
 
 (defn ^:export clear-cache []
   (do
-    (reset! compiler-state (cjs/empty-state))
+    (set! compiler-state (cjs/empty-state))
     (reset! output-cache {})))
 
 (defn ^:export compile [cljs-source js-opts]
