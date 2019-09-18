@@ -46,7 +46,7 @@ describe("CLJS_EVAL", function() {
   });
 
   // this works in dev mode, but cljs.user is factored out by gcc simple optimizations, so this wont compile
-  it("exported symbols only appear in exports if namespace declared", async function() {
+  it("exported symbols not in exports object without  namespace declaration", async function() {
     var result = await run(`
         (def ^:export foo 42)
         (js/result 3)
@@ -68,14 +68,14 @@ describe("CLJS_EVAL", function() {
   });
 
 
-  it("can export functions (declared ns)", async function() {
+  it("name munging works as exptected", async function() {
     var result = await run(`
-        (ns test.defn-test)
-        (defn ^:export foo [x] (* 42 x))
+        (ns test.munged-ns-name)
+        (defn ^:export foo-bar [x] (* 42 x))
         (js/result)
     `);
-    expect(result.exports.foo(2)).toEqual(84);
-    expect(goog.global.test.defn_test.foo(2)).toEqual(84);
+    expect(result.exports.foo_bar(2)).toEqual(84);
+    expect(goog.global.test.munged_ns_name.foo_bar(2)).toEqual(84);
   });
 
     
@@ -91,6 +91,15 @@ describe("CLJS_EVAL", function() {
     expect(Object.keys(exports)).toEqual(["greet"]);
     expect(goog.global.test.defn_multi_arity.greet()).toEqual("Hello you");
     expect(goog.global.test.defn_multi_arity.greet("y")).toEqual("Hello y");
+  });
+
+  it("reader conditionals", async function() {
+    expect(await getResult(`
+        (js/result #?(:clj  0
+                       :cljs 1))
+        `)).toEqual(1);
+
+
   });
 
 }); // close describe()

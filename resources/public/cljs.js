@@ -113,7 +113,7 @@ var eval_cljs = (filename, cljs_source, compilerOptions) => {
                     _ => {
                         var exports = compilerOptions.js_eval(compiler_output.compiled_js, compilerOptions.context);
                         // save exports
-                        console.log("exports", compiler_output.exports);
+                        // console.log("exports", compiler_output.exports);
                         // this actually becomes a lot simpler when there is no js / cljs duality because
                         // no munging / demunging is necessary.
                         compiler_output.exports.forEach(symbol => {
