@@ -193,3 +193,18 @@
 
 (defn ^:export dump-cache []
   (edn->transit-json @output-cache))
+
+(defn ^:export load-cache [serialized-cache]
+  (let [cache-data (transit-json->edn serialized-cache)]
+    (do
+      ; update analysis cache
+      (->> cache-data
+          vals
+          (map :cache)
+          (map #(swap!
+                 ; based on cljsjs.empty-state
+                 (fn [state]
+                   (-> state
+                       (assoc-in [::ana/namespaces (:name %)] %))))))
+      ; update compiled output cache
+      (swap! output-cache merge cache-data))))

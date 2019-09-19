@@ -82,7 +82,6 @@ var getExports = (code, sourceLoader) => run(code, sourceLoader).then(x => x.exp
 
 describe("CLJS_EVAL", function() {
 
-  
   beforeEach(function() {
     // window.cljs_eval.core.clear_cache();
   });
@@ -274,56 +273,84 @@ describe("CLJS_EVAL", function() {
         sourceLoader)).toEqual("abcd");
   });
 
+  it("transitive require 2 (non-macro)", async function() {
+    var sources = {
+        'my.transitive-deps21': {
+            filename: "my/transitive_deps21.cljs",
+            source: `
+                (ns my.transitive-deps21
+                    (:require [my.transitive-deps22 :as d2]
+                              [my.transitive-deps23 :as d3]))
+                (defn myfunc [s]
+                    (-> s
+                        (str "b")
+                        d2/myfunc
+                        d3/myfunc
+                    ))
+            `},
+        'my.transitive-deps22': {
+            filename: "my/transitive_deps22.cljs",
+            source: `
+                (ns my.transitive-deps22)
+                (defn myfunc [s] (str s "c"))
+            `},
+        'my.transitive-deps23': {
+            filename: "my/transitive_deps23.cljs",
+            source: `
+                (ns my.transitive-deps23)
+                (defn myfunc [s] (str s "d"))
+            `}
+    };
+      
+    var sourceLoader = (ns_id, cb) => {
+        console.log("sourceloader", ns_id, sources[ns_id.name]);
+        cb(sources[ns_id.name]);
+    }
+
+    expect(await getResult(`
+        (ns my.transitive-deps20 (:require [my.transitive-deps21 :as d1]))
+        (js/result (d1/myfunc "a"))`,
+        sourceLoader)).toEqual("abcd");
+  });
+
+
+  it("clear cache", async function() {
+    await simplerun(`
+        (ns my.cachetest1)
+        (defn myfunc [x]
+            (* 2 x))
+    `);
+    expect(goog.global.cljs_standalone.compiler.dump_cache().length > 50).toEqual(true);
+    goog.global.cljs_standalone.compiler.clear_cache()
+    expect(goog.global.cljs_standalone.compiler.dump_cache()).toEqual('["^ "]');
+    // verify compilation still works.
+    expect(await getResult(`
+        (ns my.cachetest1a)
+        (defn foo [x] (* 2 x))
+        (+ 1 2)
+        (js/result (foo 3))
+        `)).toEqual(6);
+  });
+
+  it("load cache", async function() {
+    await simplerun(`
+        (ns my.cachetest3)
+        (defn myfunc [x]
+            (* 2 x))
+    `);
+    var script = `
+      (ns my.cachetest4 (:require [my.cachetest3 :as c3]))
+      (js/result (c3/myfunc 2))
+    `;
+    var dumpedCache = goog.global.cljs_standalone.compiler.dump_cache();
+    goog.global.cljs_standalone.compiler.clear_cache();
+    // TODO: verify compile error
+    await getResult(script).then(
+        () => Promise.reject("compilation should fail with empty cache and no source loader"),
+        () => {});
+    goog.global.cljs_standalone.compiler.load_cache(dumpedCache);
+    expect(await getResult(script)).toEqual(4);
+  });
+
 
 }); // close describe()
-
-/*
-var run = () => {
-
-
-// multi-ns test:
-test("test6", `
-    (ns my.test6a)
-    (defn ^:export foobar1 [x] (do
-        (js/console.log (str x))
-        (+ 1 (* 3 x))))
-    (ns my.test6b)
-    (defn ^:export foobar2 [x] (do
-        (js/console.log (str x))
-        (+ 2 (* 5 x))))
-`);
-
-// using standard macros
-test("test7", `
-    (ns my.test7)
-    (def a (-> {} (assoc :a 1)))
-`);
-
-// defmacro test
-test("test8", `
-    (ns my.test8)
-    (defmacro clog [x] \`(js/console.log ~x))
-    (clog "asdf")
-`);
-
-// require test
-test("test9pre", `
-    (ns my.test9pre)
-    (defn somefn[x] (* 400 x))
-`);
-test("test9main", `
-    (ns my.test9main (:require my.test9pre))
-    (println (my.test9pre/somefn 3))
-`);
-
-// macro and non-macro in the same ns
-// the result is a single non-macro NS (no $macros suffix)
-// proper macro namespaces (ending w/ $macros) are created by
-// :refer-macros (this can happen during AOT compilation).
-test("test10", `
-    (ns my.test10)
-    (defmacro triplem [x] (* 3 x))
-    (defn triplef [x] (* 3 x))
-`);
-
-};*/
