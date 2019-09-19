@@ -1,27 +1,8 @@
-var removeNSPrefix = (symbolName) => {
-    var parts = symbolName.split('\.');
-    return parts[parts.length -1];
-};
-
-var nsAvailable = (nsName) => {
-    var assertFields = (obj, fieldList) => {
-        if (fieldList.length < 1) {
-            return true;
-        }
-        const nextObj = obj[fieldList[0]]
-        if (!nextObj) {
-            return false;
-        }
-        return assertFields(nextObj, fieldList.splice(1));
-    };
-    return assertFields(goog.global, nsName.split('\.'));
-};
-
 var nsNameToId = (nsName) => ({name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")});
 
 // load cljs source, compile and evalute compiled js on demand
 var loadDepNamespaces = (nsNames, compilerOptions) => {
-    var nsIds = nsNames.filter(nsName => !nsAvailable(nsName) && !namespaces_under_evaluation[nsName]).map(nsNameToId);
+    var nsIds = nsNames.filter(nsName => !cljs_standalone.compiler.ns_available(nsName) && !namespaces_under_evaluation[nsName]).map(nsNameToId);
     // console.log("loadDepNamespaces loading missing namespaces", nsIds);
     return Promise.all(nsIds.map(nsId => new Promise((resolve, reject) => {
         compilerOptions.source_loader(nsId, resolve);

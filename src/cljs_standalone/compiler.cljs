@@ -173,6 +173,9 @@
                 (if (object? exports) exports (js-obj)))
       context)))
 
+(defn ns-available [ns-name]
+  (object? (apply gobj/getValueByKeys (cons js/goog.global (cljstr/split ns-name #"\.")))))
+
 (defn sandboxed-js-eval [code, base-context]
   (let [context (add-exports (if (object? base-context) base-context (js-obj)))
         context-keys (js/Object.keys context)
