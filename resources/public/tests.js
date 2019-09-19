@@ -231,6 +231,49 @@ describe("CLJS_EVAL", function() {
     `, function() {console.log("SOURCELOADER", arguments);dummySourceLoader.apply(null, arguments);})).toEqual([10, '(js* "(~{} * ~{})" 2 5)']);
   });
 
+  it("transitive require (non-macro)", async function() {
+    var sources = {
+        'my.transitive-deps1': {
+            filename: "my/transitive_deps1.cljs",
+            source: `
+                (ns my.transitive-deps1
+                    (:require [my.transitive-deps2 :as d2]))
+                (defn myfunc [s]
+                    (-> s
+                        (str "b")
+                        d2/myfunc
+                    ))
+            `},
+        'my.transitive-deps2': {
+            filename: "my/transitive_deps2.cljs",
+            source: `
+                (ns my.transitive-deps2
+                    (:require [my.transitive-deps3 :as d3]))
+                (defn myfunc [s]
+                    (-> s
+                        (str "c")
+                        d3/myfunc
+                    ))
+            `},
+        'my.transitive-deps3': {
+            filename: "my/transitive_deps3.cljs",
+            source: `
+                (ns my.transitive-deps3)
+                (defn myfunc [s] (str s "d"))
+            `}
+    };
+      
+    var sourceLoader = (ns_id, cb) => {
+        console.log("sourceloader", ns_id, sources[ns_id.name]);
+        cb(sources[ns_id.name]);
+    }
+
+    expect(await getResult(`
+        (ns my.transitive-deps0 (:require [my.transitive-deps1 :as d1]))
+        (js/result (d1/myfunc "a"))`,
+        sourceLoader)).toEqual("abcd");
+  });
+
 
 }); // close describe()
 

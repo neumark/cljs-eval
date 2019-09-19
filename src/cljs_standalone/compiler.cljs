@@ -36,7 +36,7 @@
 
 (defn get-loader [source-loader]
   (fn [{:keys [name macros] :as ns-id} cb]
-    ;(println "Loading dependency" ns-id)
+    (println "Loading dependency" ns-id)
     (let [cached-compiled-ns (get-cached-compiled-ns (ns-to-cache-key name macros))]
       (if cached-compiled-ns
         (do
@@ -102,15 +102,11 @@
 
 
 (defn get-ns-dependencies [ns-analysis]
-  ; TODO: no need to return req-macros because those are not really dependencies: they've
-  ; already been evaluated by the time compilation is complete, therefore they are no longer needed.
-  (let [reqs (vals (:requires ns-analysis))
-        req-macros (vals (:require-macros ns-analysis))]
-    (-> (concat
-         reqs
-         (map #(symbol (str % "$macros")) req-macros))
-        set
-        vec)))
+  (-> ns-analysis
+      :requires
+      vals
+      set
+      vec))
 
 ; compile-str doesn't return analysis information for the result of the compilation.
 ; this could be fixed by re-implementing most of what compile-str does, but a cheaper
@@ -129,7 +125,7 @@
                               (write-output-cache! defined-namespaces compiled-js)
                               ; munge all symbols before passing to JS
                               (on-success (clj->js {:namespaces defined-namespaces
-                                                    :dependencies (map munge dependencies)
+                                                    :dependencies dependencies
                                                     :exports (->> exports (map str))
                                                     :compiled_js compiled-js}))))
                           (let [error (:error compiler-result)]
@@ -148,7 +144,7 @@
   (let [cb (make-compile-cb on-success on-failure)
         compiler-opts {; eval is necessary because the compiler needs to evaluate macros to compile source
                        :eval (get-js-evaluator js-eval)
-                       :verbose false
+                       :verbose true
                        :load (get-loader source-loader)
                        ; note: cache-source fn is only called by the compiler when macros are
                        ; compiled and evaluted in order to compile code which refer-macros them.

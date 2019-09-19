@@ -55,7 +55,6 @@ var nsAvailable = (nsName) => {
 };
 
 var eval_js = (js, baseContext) => {
-    console.log("EVAL JS START",js, "EVAL JS END");
     var exports = {};
     var context = Object.assign({}, {exports}, baseContext || {});
     sandboxedEval(js, context);
