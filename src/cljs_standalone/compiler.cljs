@@ -5,7 +5,7 @@
             [cljs.analyzer :as ana]
             [goog.array :as garray]
             [goog.object :as gobj :refer [get]]
-            [clojure.string :as cljstr :refer [split-lines, replace]]
+            [clojure.string :as cljstr]
             [cognitect.transit :as transit]))
 
 ; sources:
@@ -40,10 +40,10 @@
     (let [cached-compiled-ns (get-cached-compiled-ns (ns-to-cache-key name macros))]
       (if cached-compiled-ns
         (do
-          ;(println "got cached compiled namespace for " ns-id cached-compiled-ns)
+          (println "got cached compiled namespace for " ns-id cached-compiled-ns)
           (cb cached-compiled-ns))
         (do
-          ;(println "no cached compiler output for " ns-id " fallback to source-loader")
+          (println "no cached compiler output for " ns-id " fallback to source-loader")
           (invoke-source-loader source-loader ns-id cb))))))
 
 (defn set-cached-compiled-ns! [cache-key compiled-ns]
@@ -51,16 +51,22 @@
 
 (defn update-cache-handler [compiled-ns cb]
   (do
-    (set-cached-compiled-ns! (str (get-in compiled-ns [:cache :name])) compiled-ns)
+    (set-cached-compiled-ns! (get-in compiled-ns [:cache :name]) compiled-ns)
     (cb {:value nil})))
 
 
 (def goog-provide-re #"^goog\.provide\(\'([^\s]+)\'\);$")
 
+(defn remove-macros-postfix [ns]
+  (subs ns 0 (- (count ns ) 7)))
+
 (defn extract-provided-ns [compiled-js-line]
-  (if-let [match (re-matches goog-provide-re compiled-js-line)]
-    (symbol (demunge (second match)))
-    nil))
+  (some-> (re-matches goog-provide-re compiled-js-line)
+        second
+        demunge
+        ; fix improper demunging of $macros postfix
+        ((fn [s] (if (cljstr/ends-with? s "/macros") (str (remove-macros-postfix s) "$macros") s)))
+        symbol))
 
 (defn get-defined-namespaces [compiled-js]
   (->> (cljstr/split-lines compiled-js)
@@ -71,19 +77,21 @@
   (get-in @compiler-state [::ana/namespaces ns]))
 
 (defn make-compiled-ns [ns compiled-js]
-  {:lang :js
-   :name ns
-   :path (cljstr/replace (str ns) #"\." "/")
-   :source compiled-js
-   ; read analysis output from compiler's state
-   ; I assume any namespace goog.provided-ed by the output JS is present in the compiler's analysis cache
-   :cache (get-ns-cached-analysis ns)
-  })
+  (let [is-macros-ns (cljstr/ends-with? (str ns) "$macros")
+        fixed-ns-name (if is-macros-ns (symbol (remove-macros-postfix (str ns))) ns)]
+    {:lang :js
+     :name fixed-ns-name
+     :path (cljstr/replace (str fixed-ns-name) #"\." "/")
+     :source compiled-js
+                                        ; read analysis output from compiler's state
+                                        ; I assume any namespace goog.provided-ed by the output JS is present in the compiler's analysis cache
+     :cache (get-ns-cached-analysis ns)
+     }))
 
 (defn write-output-cache! [defined-namespaces compiled-js]
   (if (> (count defined-namespaces) 0)
     (do
-      ;(println "found definitions for namespaces" defined-namespaces)
+      (println "found definitions for namespaces" defined-namespaces)
       (let [new-cache-entries (apply hash-map (mapcat (fn [ns] [ns (make-compiled-ns ns compiled-js)]) defined-namespaces))]
         ;(println "cache entry for" defined-namespaces new-cache-entries)
         (swap! output-cache merge new-cache-entries)))
@@ -120,7 +128,7 @@
                               ;(println "exports" exports)
                               (write-output-cache! defined-namespaces compiled-js)
                               ; munge all symbols before passing to JS
-                              (on-success (clj->js {:namespaces (map munge defined-namespaces)
+                              (on-success (clj->js {:namespaces defined-namespaces
                                                     :dependencies (map munge dependencies)
                                                     :exports (->> exports (map str))
                                                     :compiled_js compiled-js}))))
@@ -149,7 +157,7 @@
                        :cache-source update-cache-handler
                        ;:context :expr
                        :source-map true}]
-    (binding [cljs.core/*print-newline* true
+    (binding [cljs.core/*print-newline* false
               cljs.core/*print-fn* (fn []
                                      (let [xs (js-arguments)]
                                        (.apply (.-log logger) logger (garray/clone xs))))

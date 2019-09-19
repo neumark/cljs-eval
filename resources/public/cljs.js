@@ -55,6 +55,7 @@ var nsAvailable = (nsName) => {
 };
 
 var eval_js = (js, baseContext) => {
+    console.log("EVAL JS START",js, "EVAL JS END");
     var exports = {};
     var context = Object.assign({}, {exports}, baseContext || {});
     sandboxedEval(js, context);
@@ -82,6 +83,7 @@ var eval_cljs = (filename, cljs_source, compilerOptions) => {
     // console.log("eval_cljs", filename);
     return compile(filename, cljs_source, compilerOptions).then(
         compiler_output => {
+            console.log(compiler_output);
             compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = true);
             return loadDepNamespaces(compiler_output.dependencies, compilerOptions).then(
                     _ => {

@@ -17,6 +17,29 @@ var dummySourceLoader = (ns_id, cb) => {
     }
 };
 
+var simplerun = (code, sourceLoader) => {
+    run_counter += 1;
+    var _cb = null;
+    var returnPromise = new Promise((resolve, reject) => {
+        _cb = resolve;
+    });
+    return Promise.all([eval_cljs(
+        "test_" + run_counter,
+        code, 
+        {
+            logger: customLogger,
+            source_loader: sourceLoader || dummySourceLoader,
+            js_eval: eval_js,
+            context: {
+                result: _cb
+            }
+        }), returnPromise]).then(
+            (asyncValues) => {
+                return {exports: asyncValues[0], result: asyncValues[1]};
+        });
+};
+
+
 var run_counter = 0;
 var run = (code, sourceLoader) => {
     run_counter += 1;
@@ -39,11 +62,27 @@ var run = (code, sourceLoader) => {
                 return {exports: asyncValues[0], result: asyncValues[1]};
         });
 };
+
+var simplerun = (code, sourceLoader) => {
+    run_counter += 1;
+    var _cb = null;
+    return eval_cljs(
+        "test_" + run_counter,
+        code, 
+        {
+            logger: customLogger,
+            source_loader: sourceLoader || dummySourceLoader,
+            js_eval: eval_js,
+        });
+};
+
+
 var getResult = (code, sourceLoader) => run(code, sourceLoader).then(x => x.result);
 var getExports = (code, sourceLoader) => run(code, sourceLoader).then(x => x.exports);
 
 describe("CLJS_EVAL", function() {
 
+  
   beforeEach(function() {
     // window.cljs_eval.core.clear_cache();
   });
@@ -116,7 +155,6 @@ describe("CLJS_EVAL", function() {
           ([name] (str "Hello " name)))
         (js/result (greet "x"))
     `);
-    console.log(exports);
     expect(Object.keys(exports)).toEqual(["greet"]);
     expect(goog.global.test.defn_multi_arity.greet()).toEqual("Hello you");
     expect(goog.global.test.defn_multi_arity.greet("y")).toEqual("Hello y");
@@ -159,6 +197,40 @@ describe("CLJS_EVAL", function() {
     expect(goog.global.my.test6a.foobar2).toEqual(undefined);
     expect(goog.global.my.test6b.foobar1).toEqual(undefined);
   });
+
+  it("defmacro test (no macro-require)", async function() {
+    await run(`
+        (ns my.macrotesta$macros)
+        (defmacro mymacro [x]
+            \`(* 2 ~x))
+        (js/result)
+    `);
+    expect(await getResult(`
+        (ns my.macrotestb )
+        (defn mt [x] 
+            (clj->js [(my.macrotesta/mymacro 5),
+                      (str
+                          (macroexpand '(my.macrotesta/mymacro 5)))]))
+        (js/result (mt 3))
+    `)).toEqual([10, '(js* "(~{} * ~{})" 2 5)']);
+  });
+
+  it("defmacro test (with macro-require)", async function() {
+    await simplerun(`
+        (ns my.macrotesta2$macros)
+        (defmacro mymacro [x]
+            \`(* 2 ~x))
+    `);
+    expect(await getResult(`
+        (ns my.macrotestb2 (:require-macros my.macrotesta2))
+        (defn mt [x] 
+            (clj->js [(my.macrotesta2/mymacro 5),
+                      (str
+                          (macroexpand '(my.macrotesta2/mymacro 5)))]))
+        (js/result (mt 3))
+    `, function() {console.log("SOURCELOADER", arguments);dummySourceLoader.apply(null, arguments);})).toEqual([10, '(js* "(~{} * ~{})" 2 5)']);
+  });
+
 
 }); // close describe()
 
