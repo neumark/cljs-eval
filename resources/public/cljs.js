@@ -25,25 +25,6 @@ var sandboxedEval = function(code,context) {
 	return fn.apply(null,contextValues);
 };
 
-var customLogger = {
-    log: (x) => console.log("customLogger " + x),
-    info: (x) => console.info("customLogger " + x),
-    warn: (x) => console.warn("customLogger " + x),
-    error: (x) => console.error("customLogger " + x)
-};
-
-var dummySourceLoader = (ns_id, cb) => {
-    // this will be the method to load cljs source from tiddlers
-    // console.log("trying to load source for", ns_id);
-    if (ns_id.name === 'my.math') {
-        cb({filename: "my/math.clj",
-            source: ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))"});
-    } else {
-        throw new Error("CLJS sourceLoader: no source for " + ns_id.name);
-        //cb(null);
-    }
-};
-
 var compile = (filename, source, options) => {
      return new Promise((resolve, reject) => {
          var extendedOpts = Object.assign({}, options, {
@@ -80,12 +61,6 @@ var eval_js = (js, baseContext) => {
     return exports;
 };
 
-var DEFAULT_COMPILER_OPTIONS = {
-         'logger': customLogger, // console is the object on which log() error(), etc are invoked.
-         'source_loader': dummySourceLoader,
-         'js_eval': eval_js
-     };
-
 var nsNameToId = (nsName) => ({name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")});
 
 // load cljs source, compile and evalute compiled js on demand
@@ -105,7 +80,6 @@ var namespaces_under_evaluation = {};
 
 var eval_cljs = (filename, cljs_source, compilerOptions) => {
     // console.log("eval_cljs", filename);
-    var compilerOptions = Object.assign({}, DEFAULT_COMPILER_OPTIONS, compilerOptions || {});
     return compile(filename, cljs_source, compilerOptions).then(
         compiler_output => {
             compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = true);

@@ -1,17 +1,46 @@
+var customLogger = {
+    log: (x) => console.log("customLogger " + x),
+    info: (x) => console.info("customLogger " + x),
+    warn: (x) => console.warn("customLogger " + x),
+    error: (x) => console.error("customLogger " + x)
+};
+
+var dummySourceLoader = (ns_id, cb) => {
+    // this will be the method to load cljs source from tiddlers
+    // console.log("trying to load source for", ns_id);
+    if (ns_id.name === 'my.math') {
+        cb({filename: "my/math.clj",
+            source: ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))"});
+    } else {
+        throw new Error("CLJS sourceLoader: no source for " + ns_id.name);
+        //cb(null);
+    }
+};
+
 var run_counter = 0;
-var run = (code) => {
+var run = (code, sourceLoader) => {
     run_counter += 1;
     var _cb = null;
     var returnPromise = new Promise((resolve, reject) => {
         _cb = resolve;
     });
-    return Promise.all([eval_cljs("test_" + run_counter, code, {context: {result: _cb}}), returnPromise]).then(
-        (asyncValues) => {
-            return {exports: asyncValues[0], result: asyncValues[1]};
+    return Promise.all([eval_cljs(
+        "test_" + run_counter,
+        code, 
+        {
+            logger: customLogger,
+            source_loader: sourceLoader || dummySourceLoader,
+            js_eval: eval_js,
+            context: {
+                result: _cb
+            }
+        }), returnPromise]).then(
+            (asyncValues) => {
+                return {exports: asyncValues[0], result: asyncValues[1]};
         });
 };
-var getResult = (code) => run(code).then(x => x.result);
-var getExports = (code) => run(code).then(x => x.exports);
+var getResult = (code, sourceLoader) => run(code, sourceLoader).then(x => x.result);
+var getExports = (code, sourceLoader) => run(code, sourceLoader).then(x => x.exports);
 
 describe("CLJS_EVAL", function() {
 
@@ -98,8 +127,37 @@ describe("CLJS_EVAL", function() {
         (js/result #?(:clj  0
                        :cljs 1))
         `)).toEqual(1);
+  });
 
+  it("simple require-macro", async function() {
+    expect(await getResult(`
+        (ns my.test1 (:require-macros my.math))
+        (js/result (my.math/triple 5))
+    `, dummySourceLoader)).toEqual(15);
+  });
 
+  it("simple require (function)", async function() {
+    expect(await getResult(`
+        (ns my.test2 (:require [my.math :as my-math-alias]))
+        (js/result (my-math-alias/myfunc 5 6))`,
+        dummySourceLoader)).toEqual(45);
+  });
+
+  it("can properly handle multiple namespace in single source file", async function() {
+    var exports = await getExports(`
+    (ns my.test6a)
+    (defn ^:export foobar1 [x] (do
+        (+ 1 (* 3 x))))
+    (ns my.test6b)
+    (defn ^:export foobar2 [x] (do
+        (+ 2 (* 5 x))))
+    (js/result)
+    `);
+    expect(Object.keys(exports)).toEqual(["foobar1", "foobar2"]);
+    expect(goog.global.my.test6a.foobar1(3)).toEqual(10);
+    expect(goog.global.my.test6b.foobar2(4)).toEqual(22);
+    expect(goog.global.my.test6a.foobar2).toEqual(undefined);
+    expect(goog.global.my.test6b.foobar1).toEqual(undefined);
   });
 
 }); // close describe()
@@ -107,39 +165,6 @@ describe("CLJS_EVAL", function() {
 /*
 var run = () => {
 
-// simple require-macro
-test("test1", `
-    (ns my.test1 (:require-macros my.math))
-    (println (my.math/triple 5))
-`);
-
-
-// simple require-function
-test("test2", `
-    (ns my.test2 (:require [my.math :as my-math-alias]))
-    (println (my-math-alias/myfunc 5 6))
-`);
-
-
-// simple export function 
-test("test3", `
-    (ns my.test3)
-    (defn ^:export foobar [x] (+ 1 (* 3 x)))
-`);
-
-// simple export data
-test("test4", `
-    (ns my.test4)
-    (def ^:export foobar [1 2 3 4])
-`);
-
-// simple call to host js method
-test("test5", `
-    (ns my.test5)
-    (defn ^:export foobar [x] (do
-        (js/console.log (str x))
-        (+ 1 (* 3 x))))
-`);
 
 // multi-ns test:
 test("test6", `
