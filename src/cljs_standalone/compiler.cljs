@@ -4,7 +4,7 @@
             [cljs.pprint :refer [pprint]]
             [cljs.analyzer :as ana]
             [goog.array :as garray]
-            [goog.object :as gobj :refer [get]]
+            [goog.object :as gobj]
             [clojure.string :as cljstr]
             [cognitect.transit :as transit]))
 
@@ -16,6 +16,10 @@
 ;; define your app data so that it doesn't get over-written on reload
 (defonce compiler-state (cjs/empty-state)) ;empty-state is an atom already
 (defonce output-cache (atom {}))
+
+(defonce _googfix (do
+                    (set! js/goog.isProvided_ (fn[_] false))
+                    (set! js/goog.require (fn[_] (js-obj)))))
 
 (defn noop [& _args] nil)
 
@@ -162,13 +166,28 @@
                                            (.apply (.-error logger) logger (garray/clone xs))))]
       (cjs/compile-str compiler-state cljs-source name compiler-opts cb))))
 
+(defn add-exports [context]
+  (let [exports (gobj/get context "exports")]
+    (do
+      (gobj/set context "exports"
+                (if (object? exports) exports (js-obj)))
+      context)))
+
+(defn sandboxed-js-eval [code, base-context]
+  (let [context (add-exports (if (object? base-context) base-context (js-obj)))
+        context-keys (js/Object.keys context)
+        sandboxed-code (str "(function(" (cljstr/join "," context-keys) ") {return (function(){\n" code "\n;})();})\n")
+        func (js/goog.global.eval sandboxed-code)
+        exports (js-obj)
+        args (apply array (map #(gobj/get context %) (array-seq context-keys)))]
+    (do
+      (.apply func nil args)
+      exports)))
+
 (defn parse-js-opts [js-opts]
-  {:on-success (or (. js-opts -on-success) noop)
-   :on-failure (or (. js-opts -on-failure) noop)
-   :name (or (. js-opts -name) "unknown")
-   :logger (or (. js-opts -logger) js/console)
+  {:logger (or (. js-opts -logger) js/console)
    :source-loader (or (. js-opts -source-loader) (fn [_ cb] (cb nil)))
-   :js-eval (or (. js-opts -js-eval) js/eval)})
+   :js-eval (or (. js-opts -js-eval) sandboxed-js-eval)})
 
 ; copied from replumb source
 (defn transit-json->edn
@@ -179,6 +198,7 @@
   [edn]
   (->> edn (transit/write (transit/writer :json))))
 
+
 ; --- PUBLIC API ---
 
 (defn ^:export clear-cache []
@@ -186,9 +206,19 @@
     (set! compiler-state (cjs/empty-state))
     (reset! output-cache {})))
 
-(defn ^:export compile [cljs-source js-opts]
-  (let [options (parse-js-opts js-opts)]
-    (do-compile cljs-source options)))
+(defn ^:export compile [filename cljs-source js-opts]
+  (let [on-success (atom nil)
+        on-failure (atom nil)
+        promise (js/Promise. (fn [resolve reject] (do
+                                                    (swap! on-success (fn [_] resolve))
+                                                    (swap! on-failure (fn [_] reject)))))
+        passed-options (parse-js-opts js-opts)
+        all-options (merge passed-options {:name filename
+                                           :on-success @on-success
+                                           :on-failure @on-failure})]
+    (do
+      (do-compile cljs-source all-options)
+      promise)))
 
 
 (defn ^:export dump-cache []

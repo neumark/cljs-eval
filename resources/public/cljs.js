@@ -1,39 +1,3 @@
-// allow redefinition of namespaces
-goog.isProvided_ = (_) => false;
-// because of the change above, goog.require
-// now throws errors in dev mode. Since it doesn't actually do
-// anything we can just get rid of it.
-goog.require = () => {};
-
-// based on TW5/boot/boot.js
-var sandboxedEval = function(code,context) {
-	var contextCopy = Object.assign({} ,context);
-	// Get the context variables as a pair of arrays of names and values
-	var contextNames = [], contextValues = [];
-	Object.keys(contextCopy).forEach(function(name) {
-		contextNames.push(name);
-		contextValues.push(contextCopy[name]);
-	});
-	// Add the code prologue and epilogue
-	code = "(function(" + contextNames.join(",") + ") {return (function(){\n" + code + "\n;})();})\n";
-	// Compile the code into a function
-	var fn;
-        // NOTE: cljs compiler also specifies sourceURL,  need to give this twice (with different values)? harmless if redundant.
-		fn = window["eval"](code);
-	// Call the function and return the exports
-	return fn.apply(null,contextValues);
-};
-
-var compile = (filename, source, options) => {
-     return new Promise((resolve, reject) => {
-         var extendedOpts = Object.assign({}, options, {
-             on_success: resolve,
-             on_failure: reject,
-             name: filename});
-         goog.global.cljs_standalone.compiler.compile(source, extendedOpts);
-     });
-};
-
 var removeNSPrefix = (symbolName) => {
     var parts = symbolName.split('\.');
     return parts[parts.length -1];
@@ -51,13 +15,6 @@ var nsAvailable = (nsName) => {
         return assertFields(nextObj, fieldList.splice(1));
     };
     return assertFields(goog.global, nsName.split('\.'));
-};
-
-var eval_js = (js, baseContext) => {
-    var exports = {};
-    var context = Object.assign({}, {exports}, baseContext || {});
-    sandboxedEval(js, context);
-    return exports;
 };
 
 var nsNameToId = (nsName) => ({name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")});
@@ -79,9 +36,9 @@ var namespaces_under_evaluation = {};
 
 var eval_cljs = (filename, cljs_source, compilerOptions) => {
     // console.log("eval_cljs", filename);
-    return compile(filename, cljs_source, compilerOptions).then(
+    return goog.global.cljs_standalone.compiler.compile(filename, cljs_source, compilerOptions).then(
         compiler_output => {
-            console.log(compiler_output);
+            //console.log(compiler_output);
             compiler_output.namespaces.forEach(ns => namespaces_under_evaluation[ns] = true);
             return loadDepNamespaces(compiler_output.dependencies, compilerOptions).then(
                     _ => {
