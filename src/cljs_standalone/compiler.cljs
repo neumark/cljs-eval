@@ -144,7 +144,7 @@
   (let [cb (make-compile-cb on-success on-failure)
         compiler-opts {; eval is necessary because the compiler needs to evaluate macros to compile source
                        :eval (get-js-evaluator js-eval)
-                       :verbose true
+                       :verbose false
                        :load (get-loader source-loader)
                        ; note: cache-source fn is only called by the compiler when macros are
                        ; compiled and evaluted in order to compile code which refer-macros them.
@@ -203,6 +203,7 @@
           (map :cache)
           (map #(swap!
                  ; based on cljsjs.empty-state
+                 compiler-state
                  (fn [state]
                    (-> state
                        (assoc-in [::ana/namespaces (:name %)] %))))))

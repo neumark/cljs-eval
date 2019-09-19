@@ -1,4 +1,3 @@
-var globalGoog = window.goog;
 // allow redefinition of namespaces
 goog.isProvided_ = (_) => false;
 // because of the change above, goog.require
@@ -31,7 +30,7 @@ var compile = (filename, source, options) => {
              on_success: resolve,
              on_failure: reject,
              name: filename});
-         globalGoog.global.cljs_standalone.compiler.compile(source, extendedOpts);
+         goog.global.cljs_standalone.compiler.compile(source, extendedOpts);
      });
 };
 
@@ -51,7 +50,7 @@ var nsAvailable = (nsName) => {
         }
         return assertFields(nextObj, fieldList.splice(1));
     };
-    return assertFields(globalGoog.global, nsName.split('\.'));
+    return assertFields(goog.global, nsName.split('\.'));
 };
 
 var eval_js = (js, baseContext) => {
