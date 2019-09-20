@@ -29,7 +29,6 @@ var simplerun = (code, sourceLoader) => {
         {
             logger: customLogger,
             source_loader: sourceLoader || dummySourceLoader,
-            js_eval: goog.global.cljs_standalone.compiler.sandboxed_js_eval,
             context: {
                 result: _cb
             }
@@ -53,7 +52,6 @@ var run = (code, sourceLoader) => {
         {
             logger: customLogger,
             source_loader: sourceLoader || dummySourceLoader,
-            js_eval: goog.global.cljs_standalone.compiler.sandboxed_js_eval,
             context: {
                 result: _cb
             }
@@ -71,8 +69,7 @@ var simplerun = (code, sourceLoader) => {
         code, 
         {
             logger: customLogger,
-            source_loader: sourceLoader || dummySourceLoader,
-            js_eval: goog.global.cljs_standalone.compiler.sandboxed_js_eval,
+            source_loader: sourceLoader || dummySourceLoader
         });
 };
 

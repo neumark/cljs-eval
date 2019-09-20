@@ -36,10 +36,7 @@
   (get-in @output-cache [cache-key]))
 
 (defn invoke-source-loader [source-loader ns-id cb]
-  (do
-   (js/console.log "in-invoke-source-loader")
-   (source-loader (clj->js ns-id) #(do
-                                     (cb (js->clj % :keywordize-keys true))))))
+  (source-loader (clj->js ns-id) #(cb (js->clj % :keywordize-keys true))))
 
 (defn get-loader [source-loader]
   (fn [{:keys [name macros] :as ns-id} cb]
@@ -52,9 +49,7 @@
         (do
           ;(println "no cached compiler output for " ns-id " fallback to source-loader")
           (invoke-source-loader source-loader ns-id (fn [src]
-                                                      (do
-                                                        (pprint ["loaded src", src])
-                                                        (cb {:lang :clj :source (:source src)})))))))))
+                                                      (cb {:lang :clj :source (:source src)}))))))))
 
 (defn set-cached-compiled-ns! [cache-key compiled-ns]
   (swap! output-cache assoc cache-key compiled-ns))
@@ -178,7 +173,6 @@
 (defn ns-available [ns-name]
   (object? (apply gobj/getValueByKeys (cons js/goog.global (cljstr/split ns-name #"\.")))))
 
-;var nsNameToId = (nsName) => ({name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")});
 (defn ns-name-to-id [ns-name]
   (let [str-ns-name (str ns-name)]
     {:name str-ns-name
@@ -205,26 +199,20 @@
 
 (declare eval)
 
-(defn load-dep-namespaces [ns-names js-opts cb]
-  (let [; TODO compiler options is always parsed by this point, no need to check!
-        compiler-options (if (object? js-opts) (parse-js-opts js-opts) js-opts)
-        ns-ids (->> ns-names
+(defn load-dep-namespaces [ns-names compiler-options cb]
+  (let [ns-ids (->> ns-names
                     (filter #(not (ns-available %)))
                     (map ns-name-to-id))
         ns-load-promises (map #(js/Promise. (fn [resolve reject] (invoke-source-loader
                                                                   (:source-loader compiler-options)
                                                                   %
                                                                   (fn [src]
-                                                                    (do
-                                                                      (js/console.log "ns-load-prom" src)
-                                                                      (resolve src)))))) ns-ids)
+                                                                    (resolve src))))) ns-ids)
         invoke-eval (fn [source]
-                      (do
-                        (js/console.log "invoke-eval")
-                        (eval
-                         (:filename source)
-                         (:source source)
-                         compiler-options)))]
+                      (eval
+                       (:filename source)
+                       (:source source)
+                       compiler-options))]
     (-> (js/Promise.all (apply array ns-load-promises))
         (.then (fn [sources] (js/Promise.all (apply array (map invoke-eval (array-seq sources))))))
         (.then cb))))
@@ -238,6 +226,20 @@
   [edn]
   (->> edn (transit/write (transit/writer :json))))
 
+(defn save-exports! [declared-exports exports-obj]
+  (let [fix-name (fn [n] (-> n
+                                        ;(#(do (pprint %) %))
+                             str
+                             (cljstr/replace "-" "_")
+                             (cljstr/split "/")))
+        fixed-names (map fix-name declared-exports)]
+    (reduce (fn [acc name]
+              (do
+                (gobj/set acc (second name)
+                          (js/goog.getObjectByName (cljstr/join "." name)))
+                acc))
+            exports-obj
+            fixed-names)))
 
 ; --- PUBLIC API ---
 
@@ -253,7 +255,7 @@
         promise (js/Promise. (fn [resolve reject] (do
                                                     (swap! on-success (fn [_] resolve))
                                                     (swap! on-failure (fn [_] reject)))))
-        all-options (merge  passed-options {:name filename
+        all-options (merge passed-options {:name filename
                                             :on-success @on-success
                                             :on-failure @on-failure})]
     (do
@@ -280,21 +282,6 @@
       ; update compiled output cache
       (swap! output-cache merge cache-data))))
 
-(defn save-exports! [declared-exports exports-obj]
-  (let [fix-name (fn [n] (-> n
-                           ;(#(do (pprint %) %))
-                           str
-                           (cljstr/replace "-" "_")
-                           (cljstr/split "/")))
-        fixed-names (map fix-name declared-exports)]
-    (reduce (fn [acc name]
-              (do
-                (gobj/set acc (second name)
-                          (js/goog.getObjectByName (cljstr/join "." name)))
-                acc))
-            exports-obj
-            fixed-names)))
-
 (defn ^:export eval [filename source js-opts]
   (let [;_0 (js/console.log ["eval" source])
         parsed-js-opts (if (object? js-opts) (parse-js-opts js-opts) js-opts)
@@ -313,6 +300,5 @@
                         parsed-js-opts
                         (fn [_] (run compiler-output))))]
     (-> (compile filename source parsed-js-opts)
-       ;(.then (fn [x] (do (pprint x) x)))
        (.then compile-deps))))
 
