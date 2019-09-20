@@ -35,8 +35,11 @@
 (defn get-cached-compiled-ns [cache-key]
   (get-in @output-cache [cache-key]))
 
-(defn invoke-source-loader [source-loader {:keys [name macros path] :as ns-id} cb]
-  (source-loader (clj->js ns-id) #(cb {:lang :clj :source (gobj/get % "source")})))
+(defn invoke-source-loader [source-loader ns-id cb]
+  (do
+   (js/console.log "in-invoke-source-loader")
+   (source-loader (clj->js ns-id) #(do
+                                     (cb (js->clj % :keywordize-keys true))))))
 
 (defn get-loader [source-loader]
   (fn [{:keys [name macros] :as ns-id} cb]
@@ -48,7 +51,10 @@
           (cb cached-compiled-ns))
         (do
           ;(println "no cached compiler output for " ns-id " fallback to source-loader")
-          (invoke-source-loader source-loader ns-id cb))))))
+          (invoke-source-loader source-loader ns-id (fn [src]
+                                                      (do
+                                                        (pprint ["loaded src", src])
+                                                        (cb {:lang :clj :source (:source src)})))))))))
 
 (defn set-cached-compiled-ns! [cache-key compiled-ns]
   (swap! output-cache assoc cache-key compiled-ns))
@@ -128,15 +134,11 @@
                               ;(println "exports" exports)
                               (write-output-cache! defined-namespaces compiled-js)
                               ; munge all symbols before passing to JS
-                              (on-success (clj->js {:namespaces defined-namespaces
-                                                    :dependencies dependencies
-                                                    :exports (->> exports (map str))
-                                                    :compiled_js compiled-js}))))
-                          (let [error (:error compiler-result)]
-                            (on-failure (js-obj
-                                         "message" (.-message error)
-                                         "data" (clj->js (.-data error))
-                                         "cause" (.-cause error)))))))
+                              (on-success {:namespaces defined-namespaces
+                                           :dependencies dependencies
+                                           :exports exports
+                                           :compiled-js compiled-js})))
+                          (on-failure (:error compiler-result)))))
 
 (defn get-js-evaluator [js-eval]
   (fn [{:keys [name source] :as compiled-ns}]
@@ -178,10 +180,10 @@
 
 ;var nsNameToId = (nsName) => ({name: nsName, macros: nsName.endsWith("$macros"), path: nsName.replace(/\./g, "/")});
 (defn ns-name-to-id [ns-name]
-  (clj->js
-   {:name ns-name
-    :macros (cljstr/ends-with? ns-name "$macros")
-    :path (cljstr/replace ns-name  #"\." "/")
+  (let [str-ns-name (str ns-name)]
+    {:name str-ns-name
+    :macros (cljstr/ends-with? str-ns-name "$macros")
+    :path (cljstr/replace str-ns-name  #"\." "/")
     }))
 
 (defn sandboxed-js-eval [code base-context]
@@ -204,18 +206,25 @@
 (declare eval)
 
 (defn load-dep-namespaces [ns-names js-opts cb]
-  (let [compiler-options (if (object? js-opts) (parse-js-opts js-opts) js-opts)
+  (let [; TODO compiler options is always parsed by this point, no need to check!
+        compiler-options (if (object? js-opts) (parse-js-opts js-opts) js-opts)
         ns-ids (->> ns-names
                     (filter #(not (ns-available %)))
                     (map ns-name-to-id))
-        ns-load-promises (map #(js/Promise. (fn [resolve reject] (.call (:source-loader compiler-options) nil % resolve))) ns-ids)
+        ns-load-promises (map #(js/Promise. (fn [resolve reject] (invoke-source-loader
+                                                                  (:source-loader compiler-options)
+                                                                  %
+                                                                  (fn [src]
+                                                                    (do
+                                                                      (js/console.log "ns-load-prom" src)
+                                                                      (resolve src)))))) ns-ids)
         invoke-eval (fn [source]
                       (do
-                        (js/console.log source)
+                        (js/console.log "invoke-eval")
                         (eval
-                        (gobj/get source "filename")
-                        (gobj/get source "source")
-                        compiler-options)))]
+                         (:filename source)
+                         (:source source)
+                         compiler-options)))]
     (-> (js/Promise.all (apply array ns-load-promises))
         (.then (fn [sources] (js/Promise.all (apply array (map invoke-eval (array-seq sources))))))
         (.then cb))))
@@ -272,7 +281,11 @@
       (swap! output-cache merge cache-data))))
 
 (defn save-exports! [declared-exports exports-obj]
-  (let [fix-name (fn [n] (cljstr/split (cljstr/replace n "-" "_") "/"))
+  (let [fix-name (fn [n] (-> n
+                           ;(#(do (pprint %) %))
+                           str
+                           (cljstr/replace "-" "_")
+                           (cljstr/split "/")))
         fixed-names (map fix-name declared-exports)]
     (reduce (fn [acc name]
               (do
@@ -283,22 +296,23 @@
             fixed-names)))
 
 (defn ^:export eval [filename source js-opts]
-  (let [parsed-js-opts (if (object? js-opts) (parse-js-opts js-opts) js-opts)
+  (let [;_0 (js/console.log ["eval" source])
+        parsed-js-opts (if (object? js-opts) (parse-js-opts js-opts) js-opts)
         run (fn [compiler-output]
                     (let [js-eval-fn (:js-eval parsed-js-opts)
-                          compiled-js (gobj/get compiler-output "compiled_js")
-                          declared-exports (array-seq (gobj/get compiler-output "exports"))
+                          compiled-js (:compiled-js compiler-output)
+                          declared-exports (:exports compiler-output)
                           context (:context parsed-js-opts)
                           exports-obj (js-eval-fn compiled-js context)]
                       (do
-                        (cond declared-exports
-                              (save-exports! declared-exports exports-obj))
+                        (save-exports! declared-exports exports-obj)
                         exports-obj)))
         compile-deps (fn [compiler-output]
                        (load-dep-namespaces
-                        (gobj/get compiler-output "dependencies")
+                        (:dependencies compiler-output)
                         parsed-js-opts
                         (fn [_] (run compiler-output))))]
     (-> (compile filename source parsed-js-opts)
+       ;(.then (fn [x] (do (pprint x) x)))
        (.then compile-deps))))
 
