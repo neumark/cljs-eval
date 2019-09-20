@@ -36,7 +36,8 @@
   (get-in @output-cache [cache-key]))
 
 (defn invoke-source-loader [source-loader ns-id cb]
-  (source-loader (clj->js ns-id) #(cb (js->clj % :keywordize-keys true))))
+  (-> (source-loader (clj->js ns-id))
+      (.then #(cb (js->clj % :keywordize-keys true)))))
 
 (defn get-loader [source-loader]
   (fn [{:keys [name macros] :as ns-id} cb]

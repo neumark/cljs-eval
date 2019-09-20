@@ -5,11 +5,12 @@ var customLogger = {
     error: (x) => console.error("customLogger " + x)
 };
 
-var dummySourceLoader = (ns_id, cb) => {
+var dummySourceLoader = (ns_id) => {
     // this will be the method to load cljs source from tiddlers
     // console.log("trying to load source for", ns_id);
     if (ns_id.name === 'my.math') {
-        cb({filename: "my/math.clj",
+        return Promise.resolve({
+            filename: "my/math.clj",
             source: ns_id.macros ? "(ns my.math) (defmacro triple [x] (* 3 x))" : "(ns my.math) (defn myfunc [x y] (+ (* x y) (* 3 x)))"});
     } else {
         throw new Error("CLJS sourceLoader: no source for " + ns_id.name);
@@ -259,8 +260,8 @@ describe("CLJS_EVAL", function() {
             `}
     };
       
-    var sourceLoader = (ns_id, cb) => {
-        cb(sources[ns_id.name]);
+    var sourceLoader = (ns_id) => {
+        return Promise.resolve(sources[ns_id.name]);
     }
 
     expect(await getResult(`
@@ -298,8 +299,8 @@ describe("CLJS_EVAL", function() {
             `}
     };
       
-    var sourceLoader = (ns_id, cb) => {
-        cb(sources[ns_id.name]);
+    var sourceLoader = (ns_id) => {
+        return Promise.resolve(sources[ns_id.name]);
     }
 
     expect(await getResult(`
