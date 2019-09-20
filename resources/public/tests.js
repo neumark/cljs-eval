@@ -23,7 +23,7 @@ var simplerun = (code, sourceLoader) => {
     var returnPromise = new Promise((resolve, reject) => {
         _cb = resolve;
     });
-    return Promise.all([eval_cljs(
+    return Promise.all([goog.global.cljs_standalone.compiler.eval(
         "test_" + run_counter,
         code, 
         {
@@ -47,7 +47,7 @@ var run = (code, sourceLoader) => {
     var returnPromise = new Promise((resolve, reject) => {
         _cb = resolve;
     });
-    return Promise.all([eval_cljs(
+    return Promise.all([goog.global.cljs_standalone.compiler.eval(
         "test_" + run_counter,
         code, 
         {
@@ -66,7 +66,7 @@ var run = (code, sourceLoader) => {
 var simplerun = (code, sourceLoader) => {
     run_counter += 1;
     var _cb = null;
-    return eval_cljs(
+    return goog.global.cljs_standalone.compiler.eval(
         "test_" + run_counter,
         code, 
         {
@@ -227,7 +227,7 @@ describe("CLJS_EVAL", function() {
                       (str
                           (macroexpand '(my.macrotesta2/mymacro 5)))]))
         (js/result (mt 3))
-    `, function() {console.log("SOURCELOADER", arguments);dummySourceLoader.apply(null, arguments);})).toEqual([10, '(js* "(~{} * ~{})" 2 5)']);
+    `)).toEqual([10, '(js* "(~{} * ~{})" 2 5)']);
   });
 
   it("transitive require (non-macro)", async function() {
@@ -263,7 +263,6 @@ describe("CLJS_EVAL", function() {
     };
       
     var sourceLoader = (ns_id, cb) => {
-        console.log("sourceloader", ns_id, sources[ns_id.name]);
         cb(sources[ns_id.name]);
     }
 
@@ -303,7 +302,6 @@ describe("CLJS_EVAL", function() {
     };
       
     var sourceLoader = (ns_id, cb) => {
-        console.log("sourceloader", ns_id, sources[ns_id.name]);
         cb(sources[ns_id.name]);
     }
 
