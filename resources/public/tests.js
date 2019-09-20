@@ -1,3 +1,8 @@
+var global = Function('return this')();
+var goog = goog || {global};
+global.cljs = global.cljs || {};
+global.cljs.user = global.cljs.user || {};
+
 var customLogger = {
     log: (x) => console.log("customLogger " + x),
     info: (x) => console.info("customLogger " + x),
