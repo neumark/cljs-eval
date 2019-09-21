@@ -115,12 +115,14 @@
    *
    * Replace the browser window's `onload`, ensure it's called, and then run all of the loaded specs. This includes initializing the `HtmlReporter` instance and then executing the loaded Jasmine environment. All of this will happen after all of the specs are loaded.
    */
-  var currentWindowOnload = window.onload;
+  // var currentWindowOnload = window.onload;
 
-  window.onload = function() {
+  window.runJasmine = function() {
+    /*
     if (currentWindowOnload) {
       currentWindowOnload();
     }
+    */
     htmlReporter.initialize();
     env.execute();
   };

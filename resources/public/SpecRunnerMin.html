@@ -36,11 +36,11 @@
   // minified version has issues: 'js/compiled/min/cljs-standalone.min.js.gz'
   fetch(myRequest).then(function(response) {
     return response.arrayBuffer();
-  }).then(function(buffer) {
+  }).then(buffer => {
     var src = pako.inflate(buffer, { to: 'string' });
     window.eval(src);
-    loadScript("tests.js");
-  });
+  }).then(_ => loadScript("tests.js")
+  ).then(_ => window.runJasmine());
 
   </script>
   <!-- include spec files here... -->
