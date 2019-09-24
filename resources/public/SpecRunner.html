@@ -15,7 +15,25 @@
   <!-- CLJS compiler (compiled to JS) -->
   <script src="js/compiled/cljs-standalone-dev.js" type="text/javascript"></script>
   <!-- include spec files here... -->
-  <script src="tests.js"></script>
+  <script>
+  var loadScript = (url, attr) => {
+      const elem = document.createElement('script');
+      elem.src = url;
+      elem.setAttribute('async', '');
+      if (attr) {
+        Object.keys(attr).forEach(key => {
+          elem.setAttribute(key, attr[key]);
+        });
+      }
+      const firstScript = document.getElementsByTagName('script')[0];
+      firstScript.parentNode.insertBefore(elem, firstScript);
+      return new Promise((resolve) => {
+        elem.onload = resolve;
+      });
+    }
+
+  loadScript("tests.js").then(_ => window.runJasmine());
+  </script>
 
 </head>
 

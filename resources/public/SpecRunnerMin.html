@@ -32,8 +32,10 @@
       });
     }
 
+  // bundle build
   var myRequest = new Request('js/compiled/bundle/cljs-standalone.js.gz');
-  // minified version has issues: 'js/compiled/min/cljs-standalone.min.js.gz'
+  // min build
+  // var myRequest = new Request('js/compiled/min/cljs-standalone.min.js.gz');
   fetch(myRequest).then(function(response) {
     return response.arrayBuffer();
   }).then(buffer => {

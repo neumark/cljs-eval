@@ -36,11 +36,6 @@
                            :output-to "resources/public/js/compiled/cljs-standalone-dev.js"
                            :output-dir "resources/public/js/compiled/out"
                            :source-map-timestamp true
-                           :foreign-libs [{:file "src" 
-                                           :module-type :es6
-                                           ;:preprocess cljsjs.babel-standalone/transform
-                                           ;:cljsjs.babel-standalone/babel-opts "{\"presets\": [\"env\"]}"
-                                           }]
                            ;; To console.log CLJS data-structures make sure you enable devtools in Chrome
                            ;; https://github.com/binaryage/cljs-devtools
                            :preloads [devtools.preload]}}
@@ -52,8 +47,8 @@
                 :compiler {:output-to "resources/public/js/compiled/min/cljs-standalone.min.js"
                            :output-dir "resources/public/js/compiled/min/out"
                            :main cljs-standalone.compiler
+                           :optimize-constants false
                            :optimizations :advanced
-                           :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print false}}
                {:id "bundle"
                 :source-paths ["src"]
@@ -62,7 +57,6 @@
                            :output-dir "resources/public/js/compiled/bundle/out"
                            :main cljs-standalone.compiler
                            :optimizations :simple
-                           :foreign-libs [{:file "src" :module-type :es6}]
                            :pretty-print true}}]}
 
 

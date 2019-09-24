@@ -181,16 +181,7 @@
     :path (cljstr/replace str-ns-name  #"\." "/")
     }))
 
-(defn sandboxed-js-eval [code base-context]
-  (let [context (add-exports (if (object? base-context) base-context (js-obj)))
-        context-keys (js/Object.keys context)
-        sandboxed-code (str "(function(" (cljstr/join "," context-keys) ") {return (function(){\n" code "\n;})();})\n")
-        func (js/goog.global.eval sandboxed-code)
-        exports (js-obj)
-        args (apply array (map #(gobj/get context %) (array-seq context-keys)))]
-    (do
-      (.apply func nil args)
-      exports)))
+(declare sandboxed-js-eval)
 
 (defn parse-js-opts [js-opts]
   {:logger (or (. js-opts -logger) js/console)
@@ -243,6 +234,16 @@
             fixed-names)))
 
 ; --- PUBLIC API ---
+(defn ^:export sandboxed-js-eval [code base-context]
+  (let [context (add-exports (if (object? base-context) base-context (js-obj)))
+        context-keys (js/Object.keys context)
+        sandboxed-code (str "(function(" (cljstr/join "," context-keys) ") {return (function(){\n" code "\n;})();})\n")
+        func (js/goog.global.eval sandboxed-code)
+        exports (js-obj)
+        args (apply array (map #(gobj/get context %) (array-seq context-keys)))]
+    (do
+      (.apply func nil args)
+      exports)))
 
 (defn ^:export clear-cache []
   (do
