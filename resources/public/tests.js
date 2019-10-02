@@ -347,10 +347,20 @@ describe("CLJS_EVAL", function() {
     goog.global.cljs_standalone.compiler.clear_cache();
     // TODO: verify compile error
     await getResult(script).then(
-        () => Promise.reject("compilation should fail with empty cache and no source loader"),
+        (o) => {
+            console.log(o);
+            Promise.reject("compilation should fail with empty cache and no source loader");
+        },
         () => {});
     goog.global.cljs_standalone.compiler.load_cache(dumpedCache);
     expect(await getResult(script)).toEqual(4);
+  });
+
+  it("call compile with different arities", async function() {
+    var compiledJS = await goog.global.cljs_standalone.compiler.compile("(println 5)");
+    expect(Object.keys(compiledJS)).toEqual(["namespaces", "dependencies", "exports", "compiled-js"]);
+    compiledJS = await goog.global.cljs_standalone.compiler.compile("file", "(println 5)");
+    expect(Object.keys(compiledJS)).toEqual(["namespaces", "dependencies", "exports", "compiled-js"]);
   });
 
 

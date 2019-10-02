@@ -21,6 +21,8 @@
                     (set! js/goog.isProvided_ (fn[_] false))
                     (set! js/goog.require (fn[_] (js-obj)))))
 
+(def DEFAULT-SOURCE-FILENAME "unknown")
+
 (defn noop [& _args] nil)
 
 (defn on-js-reload []
@@ -136,34 +138,6 @@
                                            :compiled-js compiled-js})))
                           (on-failure (:error compiler-result)))))
 
-(defn get-js-evaluator [js-eval]
-  (fn [{:keys [name source] :as compiled-ns}]
-    (do
-      ;(println (str "evaluating macro in " name))
-      (js-eval source))))
-
-(defn do-compile [cljs-source {:keys [name logger source-loader on-success on-failure js-eval] :as opts}]
-  (let [cb (make-compile-cb on-success on-failure)
-        compiler-opts {; eval is necessary because the compiler needs to evaluate macros to compile source
-                       :eval (get-js-evaluator js-eval)
-                       :verbose false
-                       :load (get-loader source-loader)
-                       ; note: cache-source fn is only called by the compiler when macros are
-                       ; compiled and evaluted in order to compile code which refer-macros them.
-                       ; normally, the compiler will not call this method when code is compiled, this
-                       ; must be done manually in the callback fn passed to compile-str
-                       :cache-source update-cache-handler
-                       ;:context :expr
-                       :source-map true}]
-    (binding [cljs.core/*print-newline* false
-              cljs.core/*print-fn* (fn []
-                                     (let [xs (js-arguments)]
-                                       (.apply (.-log logger) logger (garray/clone xs))))
-              cljs.core/*print-err-fn* (fn []
-                                         (let [xs (js-arguments)]
-                                           (.apply (.-error logger) logger (garray/clone xs))))]
-      (cjs/compile-str compiler-state cljs-source name compiler-opts cb))))
-
 (defn add-exports [context]
   (let [exports (gobj/get context "exports")]
     (do
@@ -183,28 +157,29 @@
 
 (declare sandboxed-js-eval)
 
-(defn parse-js-opts [js-opts]
-  {:logger (or (. js-opts -logger) js/console)
-   :source-loader (or (. js-opts -source-loader) (fn [_ cb] (cb nil)))
-   :js-eval (or (. js-opts -js-eval) sandboxed-js-eval)
-   :context (. js-opts -context)})
+(defn parse-js-opts [original-js-opts]
+  (let [js-opts (if (object? original-js-opts) original-js-opts (js-obj))]
+      {:logger (or (gobj/get js-opts "logger") js/console)
+       :source-loader (or (gobj/get js-opts "source_loader") (fn [_] (js/Promise.resolve nil)))
+       :js-eval (or (gobj/get js-opts "js_eval") sandboxed-js-eval)
+       :context (gobj/get js-opts "context")}))
 
 (declare eval)
 
-(defn load-dep-namespaces [ns-names compiler-options cb]
+(defn load-dep-namespaces [ns-names parsed-js-opts cb]
   (let [ns-ids (->> ns-names
                     (filter #(not (ns-available %)))
                     (map ns-name-to-id))
         ns-load-promises (map #(js/Promise. (fn [resolve reject] (invoke-source-loader
-                                                                  (:source-loader compiler-options)
+                                                                  (:source-loader parsed-js-opts)
                                                                   %
                                                                   (fn [src]
                                                                     (resolve src))))) ns-ids)
         invoke-eval (fn [source]
-                      (eval
+                      (eval-internal
                        (:filename source)
                        (:source source)
-                       compiler-options))]
+                       parsed-js-opts))]
     (-> (js/Promise.all (apply array ns-load-promises))
         (.then (fn [sources] (js/Promise.all (apply array (map invoke-eval (array-seq sources))))))
         (.then cb))))
@@ -233,6 +208,55 @@
             exports-obj
             fixed-names)))
 
+(defn eval-internal
+  [filename source parsed-js-opts]
+  (let [run (fn [compiler-output]
+              (let [js-eval-fn (:js-eval parsed-js-opts)
+                    compiled-js (:compiled-js compiler-output)
+                    declared-exports (:exports compiler-output)
+                    context (:context parsed-js-opts)
+                    exports-obj (js-eval-fn compiled-js context)]
+                (do
+                  (save-exports! declared-exports exports-obj)
+                  exports-obj)))
+        compile-deps (fn [compiler-output]
+                       (load-dep-namespaces
+                        (:dependencies compiler-output)
+                        parsed-js-opts
+                        (fn [_] (run compiler-output))))]
+    (-> (compile-internal filename source parsed-js-opts)
+        (.then compile-deps))))
+
+(defn compile-internal [filename cljs-source parsed-js-opts]
+   (let [on-success (atom nil)
+         on-failure (atom nil)
+         promise (js/Promise. (fn [resolve reject] (do
+                                                     (swap! on-success (fn [_] resolve))
+                                                     (swap! on-failure (fn [_] reject)))))
+         {:keys [logger source-loader js-eval]} parsed-js-opts
+         cb (make-compile-cb @on-success @on-failure)
+         compiler-opts {; eval is necessary because the compiler needs to evaluate macros to compile source
+                        :eval (fn [{:keys [name source] :as compiled-ns}]
+                                ((:js-eval parsed-js-opts) source))
+                        :verbose false
+                        :load (get-loader source-loader)
+                        ; note: cache-source fn is only called by the compiler when macros are
+                        ; compiled and evaluted in order to compile code which refer-macros them.
+                        ; normally, the compiler will not call this method when code is compiled, this
+                        ; must be done manually in the callback fn passed to compile-str
+                        :cache-source update-cache-handler
+                        :source-map true}]
+    (binding [cljs.core/*print-newline* false
+              cljs.core/*print-fn* (fn []
+                                     (let [xs (js-arguments)]
+                                       (.apply (.-log logger) logger (garray/clone xs))))
+              cljs.core/*print-err-fn* (fn []
+                                         (let [xs (js-arguments)]
+                                           (.apply (.-error logger) logger (garray/clone xs))))]
+      (do
+        (cjs/compile-str compiler-state cljs-source (or filename DEFAULT-SOURCE-FILENAME) compiler-opts cb)
+        promise))))
+
 ; --- PUBLIC API ---
 (defn ^:export sandboxed-js-eval [code base-context]
   (let [context (add-exports (if (object? base-context) base-context (js-obj)))
@@ -250,20 +274,14 @@
     (set! compiler-state (cjs/empty-state))
     (reset! output-cache {})))
 
-(defn ^:export compile [filename cljs-source js-opts]
-  (let [passed-options (if (object? js-opts) (parse-js-opts js-opts) js-opts)
-        on-success (atom nil)
-        on-failure (atom nil)
-        promise (js/Promise. (fn [resolve reject] (do
-                                                    (swap! on-success (fn [_] resolve))
-                                                    (swap! on-failure (fn [_] reject)))))
-        all-options (merge passed-options {:name filename
-                                            :on-success @on-success
-                                            :on-failure @on-failure})]
-    (do
-      (do-compile cljs-source all-options)
-      promise)))
-
+(defn ^:export compile
+  ([cljs-source]
+   (compile nil cljs-source nil))
+  ([filename cljs-source]
+   (compile filename cljs-source nil))
+  ([filename cljs-source js-opts]
+   (-> (compile-internal filename cljs-source (parse-js-opts js-opts))
+       (.then clj->js))))
 
 (defn ^:export dump-cache []
   (edn->transit-json @output-cache))
@@ -284,23 +302,10 @@
       ; update compiled output cache
       (swap! output-cache merge cache-data))))
 
-(defn ^:export eval [filename source js-opts]
-  (let [;_0 (js/console.log ["eval" source])
-        parsed-js-opts (if (object? js-opts) (parse-js-opts js-opts) js-opts)
-        run (fn [compiler-output]
-                    (let [js-eval-fn (:js-eval parsed-js-opts)
-                          compiled-js (:compiled-js compiler-output)
-                          declared-exports (:exports compiler-output)
-                          context (:context parsed-js-opts)
-                          exports-obj (js-eval-fn compiled-js context)]
-                      (do
-                        (save-exports! declared-exports exports-obj)
-                        exports-obj)))
-        compile-deps (fn [compiler-output]
-                       (load-dep-namespaces
-                        (:dependencies compiler-output)
-                        parsed-js-opts
-                        (fn [_] (run compiler-output))))]
-    (-> (compile filename source parsed-js-opts)
-       (.then compile-deps))))
-
+(defn ^:export eval
+  ([source]
+   (eval nil source nil))
+  ([filename source]
+   (eval filename source nil))
+  ([filename source js-opts]
+   (eval-internal filename source (parse-js-opts js-opts))))
