@@ -164,7 +164,7 @@
        :js-eval (or (gobj/get js-opts "js_eval") sandboxed-js-eval)
        :context (gobj/get js-opts "context")}))
 
-(declare eval)
+(declare eval-internal)
 
 (defn load-dep-namespaces [ns-names parsed-js-opts cb]
   (let [ns-ids (->> ns-names
@@ -208,25 +208,6 @@
             exports-obj
             fixed-names)))
 
-(defn eval-internal
-  [filename source parsed-js-opts]
-  (let [run (fn [compiler-output]
-              (let [js-eval-fn (:js-eval parsed-js-opts)
-                    compiled-js (:compiled-js compiler-output)
-                    declared-exports (:exports compiler-output)
-                    context (:context parsed-js-opts)
-                    exports-obj (js-eval-fn compiled-js context)]
-                (do
-                  (save-exports! declared-exports exports-obj)
-                  exports-obj)))
-        compile-deps (fn [compiler-output]
-                       (load-dep-namespaces
-                        (:dependencies compiler-output)
-                        parsed-js-opts
-                        (fn [_] (run compiler-output))))]
-    (-> (compile-internal filename source parsed-js-opts)
-        (.then compile-deps))))
-
 (defn compile-internal [filename cljs-source parsed-js-opts]
    (let [on-success (atom nil)
          on-failure (atom nil)
@@ -256,6 +237,26 @@
       (do
         (cjs/compile-str compiler-state cljs-source (or filename DEFAULT-SOURCE-FILENAME) compiler-opts cb)
         promise))))
+
+(defn eval-internal
+  [filename source parsed-js-opts]
+  (let [run (fn [compiler-output]
+              (let [js-eval-fn (:js-eval parsed-js-opts)
+                    compiled-js (:compiled-js compiler-output)
+                    declared-exports (:exports compiler-output)
+                    context (:context parsed-js-opts)
+                    exports-obj (js-eval-fn compiled-js context)]
+                (do
+                  (save-exports! declared-exports exports-obj)
+                  exports-obj)))
+        compile-deps (fn [compiler-output]
+                       (load-dep-namespaces
+                        (:dependencies compiler-output)
+                        parsed-js-opts
+                        (fn [_] (run compiler-output))))]
+    (-> (compile-internal filename source parsed-js-opts)
+        (.then compile-deps))))
+
 
 ; --- PUBLIC API ---
 (defn ^:export sandboxed-js-eval [code base-context]
